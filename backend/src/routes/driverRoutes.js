@@ -18,7 +18,6 @@ async function findOrCreateDriverForUser(userId, licenseNumber, licenseClass) {
       licenseClass,
     });
   } else {
-    // Update license info if it already exists
     driver.licenseNumber = licenseNumber;
     driver.licenseClass = licenseClass;
     await driver.save();
@@ -46,7 +45,6 @@ router.post(
           .json({ message: "licenseNumber and licenseClass are required" });
       }
 
-      // Ensure that user exists
       const user = await User.findById(req.user.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -104,12 +102,12 @@ router.get(
 /**
  * @route   GET /api/drivers/pending
  * @desc    List drivers waiting for approval
- * @access  PRIVATE (COORDINATOR)
+ * @access  PRIVATE (COORDINATOR or ADMIN)
  */
 router.get(
   "/pending",
   authMiddleware,
-  requireRole("COORDINATOR"),
+  requireRole("COORDINATOR", "ADMIN"),
   async (req, res) => {
     try {
       const drivers = await Driver.find({ isApproved: false }).populate(
@@ -128,12 +126,12 @@ router.get(
 /**
  * @route   PATCH /api/drivers/:id/approve
  * @desc    Approve a driver
- * @access  PRIVATE (COORDINATOR)
+ * @access  PRIVATE (COORDINATOR or ADMIN)
  */
 router.patch(
   "/:id/approve",
   authMiddleware,
-  requireRole("COORDINATOR"),
+  requireRole("COORDINATOR", "ADMIN"),
   async (req, res) => {
     try {
       const driverId = req.params.id;

@@ -7,7 +7,7 @@ const connectDB = require("./config/db");
 const app = express();
 const driverRoutes = require("./routes/driverRoutes");
 const vehicleRoutes = require("./routes/vehicleRoutes");
-
+const adminRoutes = require("./routes/adminRoutes");
 
 // DB'ye bağlan
 connectDB();
@@ -24,7 +24,7 @@ app.use("/api/requests", requestRoutes);
 app.use("/api/trips", tripRoutes);
 app.use("/api/drivers", driverRoutes);
 app.use("/api/vehicles", vehicleRoutes);
-
+app.use("/api/admin", adminRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", message: "Backend is running" });

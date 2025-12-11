@@ -123,12 +123,12 @@ router.get(
 /**
  * @route   GET /api/vehicles/pending
  * @desc    List vehicles waiting for verification
- * @access  PRIVATE (COORDINATOR)
+ * @access  PRIVATE (COORDINATOR or ADMIN)
  */
 router.get(
   "/pending",
   authMiddleware,
-  requireRole("COORDINATOR"),
+  requireRole("COORDINATOR", "ADMIN"),
   async (req, res) => {
     try {
       const vehicles = await Vehicle.find({
@@ -149,12 +149,12 @@ router.get(
 /**
  * @route   PATCH /api/vehicles/:id/verify
  * @desc    Verify a vehicle
- * @access  PRIVATE (COORDINATOR)
+ * @access  PRIVATE (COORDINATOR or ADMIN)
  */
 router.patch(
   "/:id/verify",
   authMiddleware,
-  requireRole("COORDINATOR"),
+  requireRole("COORDINATOR", "ADMIN"),
   async (req, res) => {
     try {
       const vehicleId = req.params.id;

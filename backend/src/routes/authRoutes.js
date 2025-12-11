@@ -26,7 +26,9 @@ router.post("/register", async (req, res) => {
     const { name, email, password, role } = req.body;
 
     if (!name || !email || !password) {
-      return res.status(400).json({ message: "Name, email and password are required" });
+      return res
+        .status(400)
+        .json({ message: "Name, email and password are required" });
     }
 
     // Email zaten var mı?
@@ -50,6 +52,7 @@ router.post("/register", async (req, res) => {
       email: email.toLowerCase(),
       password: hashedPassword,
       role: userRole,
+      // isActive alanı modelde default: true ise burada ayrı set etmeye gerek yok
     });
 
     const token = generateToken(user);
@@ -75,17 +78,30 @@ router.post("/login", async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required" });
+      return res
+        .status(400)
+        .json({ message: "Email and password are required" });
     }
 
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
-      return res.status(400).json({ message: "Invalid email or password" });
+      return res
+        .status(400)
+        .json({ message: "Invalid email or password" });
+    }
+
+    // Hesap pasif ise login'e izin verme
+    if (user.isActive === false) {
+      return res
+        .status(403)
+        .json({ message: "Account is disabled. Please contact admin." });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: "Invalid email or password" });
+      return res
+        .status(400)
+        .json({ message: "Invalid email or password" });
     }
 
     const token = generateToken(user);
@@ -105,6 +121,7 @@ router.post("/login", async (req, res) => {
   }
 });
 
+// GET /api/auth/me
 router.get("/me", authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId).select("-password");
