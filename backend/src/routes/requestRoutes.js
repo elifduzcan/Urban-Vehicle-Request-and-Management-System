@@ -86,9 +86,9 @@ router.get(
   requireRole("DRIVER"),
   async (req, res) => {
     try {
-      const requests = await Request.find({ status: "PENDING" }).sort({
-        createdAt: 1,
-      });
+      const requests = await Request.find({ status: "PENDING" })
+        .sort({ createdAt: -1 })      // en yeni istek en üstte
+        .populate("passenger");       // yolcu bilgilerini de getir
 
       return res.json({ requests });
     } catch (err) {

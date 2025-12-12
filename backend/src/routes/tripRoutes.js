@@ -59,6 +59,7 @@ async function getApprovedDriverAndVerifiedVehicle(userId) {
  * - Driver için onaylı (isApproved) ve aktif (isActive) bir Driver kaydı olmalı.
  * - Bu driver'a ait en az bir doğrulanmış (isVerified) + aktif (isActive) araç olmalı.
  * - Request PENDING değilse kabul edilemez.
+ * - Aynı request için birden fazla trip oluşturulamaz.
  */
 router.post("/", authMiddleware, requireRole("DRIVER"), async (req, res) => {
   try {
@@ -102,6 +103,18 @@ router.post("/", authMiddleware, requireRole("DRIVER"), async (req, res) => {
       return res
         .status(400)
         .json({ message: "Request is not available (not PENDING)" });
+    }
+
+    // 3.5) Aynı request için daha önce trip oluşturulmuş mu?
+    const existingTripForRequest = await Trip.findOne({
+      request: request._id,
+    });
+
+    if (existingTripForRequest) {
+      return res.status(400).json({
+        message:
+          "This request is already assigned to another driver (trip already exists).",
+      });
     }
 
     // 4) Request'i ACCEPTED yap

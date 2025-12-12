@@ -1,4 +1,4 @@
-/// src/routes/adminRoutes.js
+// src/routes/adminRoutes.js
 const express = require("express");
 const User = require("../models/user");
 const authMiddleware = require("../middleware/authMiddleware");
