@@ -20,7 +20,8 @@ router.post("/", authMiddleware, requireRole("PASSENGER"), async (req, res) => {
       });
     }
 
-    // YENİ: Aynı yolcunun birden fazla aktif (PENDING / ACCEPTED) talebi olmasın
+    // Aynı yolcunun birden fazla aktif request'i olmasın:
+    // Aktif saydıklarımız: PENDING ve ACCEPTED
     const existingActiveRequest = await Request.findOne({
       passenger: req.user.userId,
       status: { $in: ["PENDING", "ACCEPTED"] },

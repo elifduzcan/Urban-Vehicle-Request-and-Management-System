@@ -155,56 +155,6 @@ router.patch(
         return res.status(400).json({ message: "Trip is not ongoing" });
       }
 
-      trip.status = "COMPLETED";
-      trip.completedAt = new Date();
-      await trip.save();
-
-      if (trip.request) {
-        trip.request.status = "COMPLETED";
-        await trip.request.save();
-      }
-
-      return res.json({ trip });
-    } catch (err) {
-      console.error("Complete trip error:", err);
-      return res
-        .status(500)
-        .json({ message: "Server error while completing trip" });
-    }
-  }
-);
-
-/**
- * PATCH /api/trips/:id/cancel
- * DRIVER kendi trip'ini iptal eder.
- *
- * Kurallar:
- * - Trip bu driver'a ait olmalı.
- * - COMPLETED ya da zaten CANCELLED olan trip tekrar iptal edilemez.
- * - Trip status'ü CANCELLED yapılır.
- * - Bağlı Request varsa o da CANCELLED yapılır.
- */
-router.patch(
-  "/:id/complete",
-  authMiddleware,
-  requireRole("DRIVER"),
-  async (req, res) => {
-    try {
-      const trip = await Trip.findById(req.params.id).populate("request");
-      if (!trip) {
-        return res.status(404).json({ message: "Trip not found" });
-      }
-
-      if (trip.driver.toString() !== req.user.userId) {
-        return res
-          .status(403)
-          .json({ message: "You are not the driver of this trip" });
-      }
-
-      if (trip.status !== "ON_GOING") {
-        return res.status(400).json({ message: "Trip is not ongoing" });
-      }
-
       // 1) Trip'i tamamla
       trip.status = "COMPLETED";
       trip.completedAt = new Date();
@@ -238,6 +188,67 @@ router.patch(
       return res
         .status(500)
         .json({ message: "Server error while completing trip" });
+    }
+  }
+);
+
+/**
+ * PATCH /api/trips/:id/cancel
+ * DRIVER kendi trip'ini iptal eder.
+ *
+ * Kurallar:
+ * - Trip bu driver'a ait olmalı.
+ * - COMPLETED ya da zaten CANCELLED olan trip tekrar iptal edilemez.
+ * - Trip status'ü CANCELLED yapılır.
+ * - Bağlı Request varsa o da CANCELLED yapılır.
+ */
+router.patch(
+  "/:id/cancel",
+  authMiddleware,
+  requireRole("DRIVER"),
+  async (req, res) => {
+    try {
+      const trip = await Trip.findById(req.params.id).populate("request");
+      if (!trip) {
+        return res.status(404).json({ message: "Trip not found" });
+      }
+
+      // Trip gerçekten bu user'a mı ait? (Trip.driver User ref'i)
+      if (trip.driver.toString() !== req.user.userId) {
+        return res
+          .status(403)
+          .json({ message: "You are not the driver of this trip" });
+      }
+
+      // COMPLETED trip iptal edilemez
+      if (trip.status === "COMPLETED") {
+        return res
+          .status(400)
+          .json({ message: "Completed trips cannot be cancelled" });
+      }
+
+      // Zaten CANCELLED ise tekrar iptal etme
+      if (trip.status === "CANCELLED") {
+        return res
+          .status(400)
+          .json({ message: "Trip is already cancelled" });
+      }
+
+      trip.status = "CANCELLED";
+      trip.completedAt = new Date();
+      await trip.save();
+
+      if (trip.request) {
+        trip.request.status = "CANCELLED";
+        await trip.request.save();
+      }
+
+      return res.json({ trip });
+    } catch (err) {
+      console.error("Cancel trip error:", err);
+      return res
+        .status(500)
+        .json({ message: "Server error while cancelling trip" });
     }
   }
 );
