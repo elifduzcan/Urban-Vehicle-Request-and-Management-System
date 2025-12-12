@@ -185,7 +185,7 @@ router.patch(
  * - Bağlı Request varsa o da CANCELLED yapılır.
  */
 router.patch(
-  "/:id/cancel",
+  "/:id/complete",
   authMiddleware,
   requireRole("DRIVER"),
   async (req, res) => {
@@ -201,33 +201,43 @@ router.patch(
           .json({ message: "You are not the driver of this trip" });
       }
 
-      if (trip.status === "COMPLETED") {
-        return res
-          .status(400)
-          .json({ message: "Completed trips cannot be cancelled" });
+      if (trip.status !== "ON_GOING") {
+        return res.status(400).json({ message: "Trip is not ongoing" });
       }
 
-      if (trip.status === "CANCELLED") {
-        return res
-          .status(400)
-          .json({ message: "Trip is already cancelled" });
-      }
-
-      trip.status = "CANCELLED";
-      trip.completedAt = new Date(); // log amaçlı
+      // 1) Trip'i tamamla
+      trip.status = "COMPLETED";
+      trip.completedAt = new Date();
       await trip.save();
 
+      // 2) Bağlı request'i tamamla
       if (trip.request) {
-        trip.request.status = "CANCELLED";
+        trip.request.status = "COMPLETED";
         await trip.request.save();
+      }
+
+      // 3) Driver istatistiğini güncelle (totalTrips + 1)
+      try {
+        const driverProfile = await Driver.findOne({ user: req.user.userId });
+        if (driverProfile) {
+          driverProfile.totalTrips = (driverProfile.totalTrips || 0) + 1;
+          await driverProfile.save();
+        }
+      } catch (statsErr) {
+        console.error(
+          "Error while updating driver statistics on trip complete:",
+          statsErr
+        );
+        // İstatistik güncellenemese bile trip tamamlanmış sayılıyor,
+        // o yüzden burada ekstra hata döndürmüyoruz.
       }
 
       return res.json({ trip });
     } catch (err) {
-      console.error("Cancel trip error:", err);
+      console.error("Complete trip error:", err);
       return res
         .status(500)
-        .json({ message: "Server error while cancelling trip" });
+        .json({ message: "Server error while completing trip" });
     }
   }
 );

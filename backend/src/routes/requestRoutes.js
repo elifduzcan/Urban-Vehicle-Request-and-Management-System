@@ -20,11 +20,24 @@ router.post("/", authMiddleware, requireRole("PASSENGER"), async (req, res) => {
       });
     }
 
+    // YENİ: Aynı yolcunun birden fazla aktif (PENDING / ACCEPTED) talebi olmasın
+    const existingActiveRequest = await Request.findOne({
+      passenger: req.user.userId,
+      status: { $in: ["PENDING", "ACCEPTED"] },
+    });
+
+    if (existingActiveRequest) {
+      return res.status(400).json({
+        message:
+          "You already have an active request. Please cancel or wait until it is completed before creating a new one.",
+      });
+    }
+
     const request = await Request.create({
       passenger: req.user.userId,
       pickupAddress,
       dropoffAddress,
-      // status default şemadan PENDING gelecek
+      // status default: PENDING
     });
 
     return res.status(201).json({ request });
