@@ -32,9 +32,9 @@ export default function LoginPage() {
       if (user.role === "DRIVER") {
         navigate("/driver");
       } else if (user.role === "COORDINATOR") {
-        navigate("/coordinator");
+        navigate("/admin/requests");
       } else if (user.role === "ADMIN") {
-        navigate("/admin");
+        navigate("/admin/users");
       } else {
         navigate("/passenger");
       }
