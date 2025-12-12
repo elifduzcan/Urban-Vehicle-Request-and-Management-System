@@ -30,14 +30,14 @@ export default function RegisterPage() {
       login(user, token);
 
       if (user.role === "DRIVER") {
-        navigate("/driver");
-      } else if (user.role === "COORDINATOR") {
-        navigate("/coordinator");
-      } else if (user.role === "ADMIN") {
-        navigate("/admin");
-      } else {
-        navigate("/passenger");
-      }
+      navigate("/driver");
+    } else if (user.role === "COORDINATOR") {
+      navigate("/admin/requests");
+    } else if (user.role === "ADMIN") {
+      navigate("/admin/users");
+    } else {
+      navigate("/passenger");
+    }
     } catch (err) {
       console.error(err);
       setError(
@@ -95,6 +95,7 @@ export default function RegisterPage() {
           >
             <option value="PASSENGER">Passenger</option>
             <option value="DRIVER">Driver</option>
+            <option value="ADMIN">Admin</option>
             {/* COORDINATOR / ADMIN normalde sadece admin tarafından atanmalı
                 ama test için istersen buraya da eklenebilir */}
           </select>

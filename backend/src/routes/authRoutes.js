@@ -40,12 +40,12 @@ router.post("/register", async (req, res) => {
     // Şifreyi hashle
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Role'i kontrol edelim (şimdilik sadece PASSENGER / DRIVER seçimine izin verelim)
+    // Role'i kontrol edelim (ARTIK PASSENGER / DRIVER / ADMIN / COORDINATOR seçimine izin veriyoruz)
     let userRole = role || "PASSENGER";
-    const allowedRoles = ["PASSENGER", "DRIVER"];
+    const allowedRoles = ["PASSENGER", "DRIVER", "ADMIN", "COORDINATOR"];
     if (!allowedRoles.includes(userRole)) {
-      userRole = "PASSENGER";
-    }
+    userRole = "PASSENGER";
+}
 
     const user = await User.create({
       name,
