@@ -40,6 +40,19 @@ const tripSchema = new mongoose.Schema(
       type: Date,
     },
 
+    // Bu trip yolcu tarafından puanlandı mı?
+    isRated: {
+      type: Boolean,
+      default: false,
+    },
+
+    // Yolcunun sürücüye verdiği puan (1–5 arası)
+    passengerRating: {
+      type: Number,
+      min: 1,
+      max: 5,
+    },
+
     // Optional: later we can add fare, distance, etc.
     fare: {
       type: Number,
@@ -53,4 +66,3 @@ const tripSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model("Trip", tripSchema);
-  

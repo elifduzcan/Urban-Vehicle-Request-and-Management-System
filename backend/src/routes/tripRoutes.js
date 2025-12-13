@@ -380,4 +380,109 @@ router.get(
   }
 );
 
+/**
+ * POST /api/trips/:id/rate
+ * PASSENGER → tamamlanmış bir trip için sürücüyü puanlar.
+ *
+ * Kurallar:
+ * - Trip mevcut olmalı.
+ * - Trip bu yolcuya ait olmalı (passenger == current user).
+ * - Trip status'ü COMPLETED olmalı.
+ * - Aynı trip sadece 1 kez puanlanabilir.
+ * - Puan 1 ile 5 arasında olmalı.
+ */
+router.post(
+  "/:id/rate",
+  authMiddleware,
+  requireRole("PASSENGER"),
+  async (req, res) => {
+    try {
+      const { rating } = req.body;
+
+      // 1) rating valid mi?
+      if (typeof rating !== "number" || Number.isNaN(rating)) {
+        return res
+          .status(400)
+          .json({ message: "rating must be a number between 1 and 5" });
+      }
+
+      if (rating < 1 || rating > 5) {
+        return res
+          .status(400)
+          .json({ message: "rating must be between 1 and 5" });
+      }
+
+      // 2) Trip'i bul
+      const trip = await Trip.findById(req.params.id);
+      if (!trip) {
+        return res.status(404).json({ message: "Trip not found" });
+      }
+
+      // 3) Bu trip gerçekten bu yolcuya mı ait?
+      if (trip.passenger.toString() !== req.user.userId) {
+        return res
+          .status(403)
+          .json({ message: "You are not the passenger of this trip" });
+      }
+
+      // 4) Sadece COMPLETED trip'ler puanlanabilir
+      if (trip.status !== "COMPLETED") {
+        return res.status(400).json({
+          message: "Only completed trips can be rated",
+        });
+      }
+
+      // 5) Aynı trip ikinci kez puanlanamaz
+      if (trip.isRated) {
+        return res
+          .status(400)
+          .json({ message: "This trip has already been rated" });
+      }
+
+      // 6) Driver profilini bul
+      const driverProfile = await Driver.findOne({ user: trip.driver });
+      if (!driverProfile) {
+        return res
+          .status(404)
+          .json({ message: "Driver profile not found" });
+      }
+
+      // 7) Ortalama rating'i güncelle (basit running average)
+      const currentAvg = driverProfile.rating || 0;
+      const currentCount = driverProfile.ratingCount || 0;
+      const newCount = currentCount + 1;
+
+      const newAvg =
+        currentCount === 0
+          ? rating
+          : (currentAvg * currentCount + rating) / newCount;
+
+      driverProfile.rating = newAvg;
+      driverProfile.ratingCount = newCount;
+      await driverProfile.save();
+
+      // 8) Trip'i işaretle
+      trip.isRated = true;
+      trip.passengerRating = rating;
+      await trip.save();
+
+      return res.json({
+        message: "Rating submitted successfully",
+        driver: {
+          id: driverProfile._id,
+          rating: driverProfile.rating,
+          ratingCount: driverProfile.ratingCount,
+          totalTrips: driverProfile.totalTrips,
+        },
+        trip,
+      });
+    } catch (err) {
+      console.error("Rate trip error:", err);
+      return res
+        .status(500)
+        .json({ message: "Server error while rating trip" });
+    }
+  }
+);
+
 module.exports = router;
