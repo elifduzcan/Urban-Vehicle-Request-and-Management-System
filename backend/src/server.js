@@ -18,6 +18,7 @@ app.use(express.json());
 const authRoutes = require("./routes/authRoutes");
 const requestRoutes = require("./routes/requestRoutes");
 const tripRoutes = require("./routes/tripRoutes");
+const passengerRoutes = require("./routes/passengerRoutes");
 
 app.use("/api/auth", authRoutes);
 app.use("/api/requests", requestRoutes);
@@ -25,6 +26,7 @@ app.use("/api/trips", tripRoutes);
 app.use("/api/drivers", driverRoutes);
 app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/passenger", passengerRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", message: "Backend is running" });
