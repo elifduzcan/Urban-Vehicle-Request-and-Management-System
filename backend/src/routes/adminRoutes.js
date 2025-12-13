@@ -316,4 +316,122 @@ router.get(
   }
 );
 
+/**
+ * GET /api/admin/consistency
+ * ADMIN ve COORDINATOR için veri tutarlılığı kontrolü.
+ *
+ * Bu endpoint, temel ilişki ve durum (status) kontrollerini yapar:
+ *  - User referansı olmayan Driver kayıtları
+ *  - Driver referansı olmayan Vehicle kayıtları
+ *  - Passenger (User) referansı olmayan Request kayıtları
+ *  - Request/Driver/Passenger/Vehicle referansı eksik Trip kayıtları
+ *  - Trip ve Request status'leri arasında uyumsuzluklar
+ *
+ * NOT: Bu endpoint sadece raporlama amaçlıdır; herhangi bir kayıtı silmez veya düzeltmez.
+ */
+router.get(
+  "/consistency",
+  authMiddleware,
+  requireRole("ADMIN", "COORDINATOR"),
+  async (req, res) => {
+    try {
+      // 1) User referansı olmayan driver'lar
+      const drivers = await Driver.find({}).lean();
+      const users = await User.find({}).select("_id").lean();
+      const userIds = new Set(users.map((u) => String(u._id)));
+
+      const driversWithMissingUser = drivers.filter(
+        (d) => !d.user || !userIds.has(String(d.user))
+      );
+
+      // 2) Driver referansı olmayan araçlar
+      const vehicles = await Vehicle.find({}).lean();
+      const driverIds = new Set(drivers.map((d) => String(d._id)));
+
+      const vehiclesWithMissingDriver = vehicles.filter(
+        (v) => !v.ownerDriver || !driverIds.has(String(v.ownerDriver))
+      );
+
+      // 3) Passenger referansı olmayan request'ler
+      const requests = await Request.find({}).lean();
+
+      const requestsWithMissingPassenger = requests.filter(
+        (r) => !r.passenger || !userIds.has(String(r.passenger))
+      );
+
+      // 4) Trip'lerde eksik referanslar ve status uyumsuzlukları
+      const trips = await Trip.find({}).lean();
+
+      const tripsWithMissingRefs = [];
+      const statusInconsistencies = [];
+
+      // Request status map'i (id -> status) daha hızlı kontrol için
+      const requestStatusMap = new Map(
+        requests.map((r) => [String(r._id), r.status])
+      );
+
+      trips.forEach((t) => {
+        const problems = [];
+
+        if (!t.request || !requestStatusMap.has(String(t.request))) {
+          problems.push("missing_request");
+        }
+        if (!t.driver || !userIds.has(String(t.driver))) {
+          problems.push("missing_driver_user");
+        }
+        if (!t.passenger || !userIds.has(String(t.passenger))) {
+          problems.push("missing_passenger_user");
+        }
+        if (!t.vehicle) {
+          problems.push("missing_vehicle");
+        }
+
+        if (problems.length > 0) {
+          tripsWithMissingRefs.push({
+            tripId: t._id,
+            problems,
+          });
+        }
+
+        // Status tutarlılık kontrolü (request varsa)
+        if (t.request && requestStatusMap.has(String(t.request))) {
+          const reqStatus = requestStatusMap.get(String(t.request));
+          const tripStatus = t.status;
+
+          // Basit uyum kuralları
+          if (
+            (tripStatus === "COMPLETED" && reqStatus !== "COMPLETED") ||
+            (tripStatus === "ON_GOING" &&
+              !["ACCEPTED", "ON_GOING"].includes(reqStatus)) ||
+            (tripStatus === "CANCELLED" &&
+              !["CANCELLED", "PENDING", "ACCEPTED"].includes(reqStatus))
+          ) {
+            statusInconsistencies.push({
+              tripId: t._id,
+              tripStatus,
+              requestId: t.request,
+              requestStatus: reqStatus,
+            });
+          }
+        }
+      });
+
+      return res.json({
+        consistencyReport: {
+          driversWithMissingUser,
+          vehiclesWithMissingDriver,
+          requestsWithMissingPassenger,
+          tripsWithMissingRefs,
+          statusInconsistencies,
+        },
+      });
+    } catch (err) {
+      console.error("Admin consistency check error:", err);
+      return res.status(500).json({
+        message: "Server error while running consistency checks",
+      });
+    }
+  }
+);
+
 module.exports = router;
