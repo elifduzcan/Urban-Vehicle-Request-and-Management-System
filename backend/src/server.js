@@ -19,6 +19,7 @@ const authRoutes = require("./routes/authRoutes");
 const requestRoutes = require("./routes/requestRoutes");
 const tripRoutes = require("./routes/tripRoutes");
 const passengerRoutes = require("./routes/passengerRoutes");
+const coordinatorRoutes = require("./routes/coordinatorRoutes");
 
 app.use("/api/auth", authRoutes);
 app.use("/api/requests", requestRoutes);
@@ -27,6 +28,7 @@ app.use("/api/drivers", driverRoutes);
 app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/passenger", passengerRoutes);
+app.use("/api/coordinator", coordinatorRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", message: "Backend is running" });
