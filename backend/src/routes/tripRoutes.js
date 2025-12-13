@@ -275,9 +275,11 @@ router.patch(
  *  - driverId: belirli bir driver (User id)
  *  - passengerId: belirli bir passenger
  *  - from, to: tarih aralığı (createdAt'e göre, ISO date string)
+ *  - page: sayfa numarası (default: 1)
+ *  - limit: sayfa başına kayıt sayısı (default: 20, max: 100)
  *
  * Örnek:
- *  GET /api/trips?status=ON_GOING
+ *  GET /api/trips?status=ON_GOING&page=1&limit=20
  *  GET /api/trips?driverId=6565...&from=2025-12-01&to=2025-12-31
  */
 router.get(
@@ -312,14 +314,33 @@ router.get(
         }
       }
 
-      const trips = await Trip.find(filter)
-        .populate("request")
-        .populate("driver")
-        .populate("passenger")
-        .populate("vehicle")
-        .sort({ createdAt: -1 });
+      // Pagination parametreleri
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const limitRaw = parseInt(req.query.limit, 10) || 20;
+      const limit = Math.min(Math.max(limitRaw, 1), 100);
+      const skip = (page - 1) * limit;
 
-      return res.json({ trips });
+      const [total, trips] = await Promise.all([
+        Trip.countDocuments(filter),
+        Trip.find(filter)
+          .populate("request")
+          .populate("driver")
+          .populate("passenger")
+          .populate("vehicle")
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit),
+      ]);
+
+      return res.json({
+        trips,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
     } catch (err) {
       console.error("Admin/Coordinator list trips error:", err);
       return res

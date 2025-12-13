@@ -22,6 +22,8 @@ const ALLOWED_ROLES = ["PASSENGER", "DRIVER", "COORDINATOR", "ADMIN"];
  * Opsiyonel query parametreleri:
  *  - role: PASSENGER / DRIVER / COORDINATOR / ADMIN
  *  - isActive: true / false
+ *  - page: sayfa numarası (default: 1)
+ *  - limit: sayfa başına kayıt sayısı (default: 20, max: 100)
  */
 router.get(
   "/users",
@@ -42,7 +44,19 @@ router.get(
         if (isActive === "false") filter.isActive = false;
       }
 
-      const users = await User.find(filter).sort({ createdAt: -1 });
+      // Pagination parametreleri
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const limitRaw = parseInt(req.query.limit, 10) || 20;
+      const limit = Math.min(Math.max(limitRaw, 1), 100);
+      const skip = (page - 1) * limit;
+
+      const [total, users] = await Promise.all([
+        User.countDocuments(filter),
+        User.find(filter)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit),
+      ]);
 
       // Şifreyi asla dönmüyoruz
       const safeUsers = users.map((u) => ({
@@ -54,7 +68,15 @@ router.get(
         createdAt: u.createdAt,
       }));
 
-      return res.json({ users: safeUsers });
+      return res.json({
+        users: safeUsers,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
     } catch (err) {
       console.error("Admin list users error:", err);
       return res

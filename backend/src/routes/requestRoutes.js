@@ -234,9 +234,11 @@ router.patch(
  *  - status: PENDING / ACCEPTED / COMPLETED / CANCELLED
  *  - passengerId: belirli bir yolcunun istekleri
  *  - from, to: tarih aralığı (ISO string, createdAt'e göre)
+ *  - page: sayfa numarası (default: 1)
+ *  - limit: sayfa başına kayıt sayısı (default: 20, max: 100)
  *
  * Örnek:
- *  GET /api/requests?status=PENDING
+ *  GET /api/requests?status=PENDING&page=1&limit=20
  *  GET /api/requests?passengerId=6565...&from=2025-12-01&to=2025-12-10
  */
 router.get(
@@ -267,11 +269,30 @@ router.get(
         }
       }
 
-      const requests = await Request.find(filter)
-        .sort({ createdAt: -1 })
-        .populate("passenger");
+      // Pagination parametreleri
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const limitRaw = parseInt(req.query.limit, 10) || 20;
+      const limit = Math.min(Math.max(limitRaw, 1), 100);
+      const skip = (page - 1) * limit;
 
-      return res.json({ requests });
+      const [total, requests] = await Promise.all([
+        Request.countDocuments(filter),
+        Request.find(filter)
+          .sort({ createdAt: -1 })
+          .populate("passenger")
+          .skip(skip)
+          .limit(limit),
+      ]);
+
+      return res.json({
+        requests,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
     } catch (err) {
       console.error("Admin/Coordinator list requests error:", err);
       return res
