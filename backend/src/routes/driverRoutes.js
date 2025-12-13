@@ -163,4 +163,49 @@ router.patch(
   }
 );
 
+/**
+ * PATCH /api/drivers/:id/status
+ * COORDINATOR veya ADMIN → sürücünün isActive durumunu günceller.
+ *
+ * Body:
+ *  { "isActive": true }  veya  { "isActive": false }
+ */
+router.patch(
+  "/:id/status",
+  authMiddleware,
+  requireRole("COORDINATOR", "ADMIN"),
+  async (req, res) => {
+    try {
+      const { isActive } = req.body;
+
+      // Body kontrolü
+      if (typeof isActive === "undefined") {
+        return res
+          .status(400)
+          .json({ message: "isActive field is required (true/false)" });
+      }
+
+      const driver = await Driver.findByIdAndUpdate(
+        req.params.id,
+        { isActive: Boolean(isActive) },
+        { new: true }
+      ).populate("user");
+
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+
+      return res.json({
+        message: "Driver status updated successfully",
+        driver,
+      });
+    } catch (err) {
+      console.error("Error in PATCH /api/drivers/:id/status:", err);
+      return res.status(500).json({
+        message: "Server error while updating driver status",
+      });
+    }
+  }
+);
+
 module.exports = router;
