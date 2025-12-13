@@ -330,6 +330,73 @@ router.get(
 );
 
 /**
+ * GET /api/trips/:id
+ * Tek bir trip'in detayını döner.
+ *
+ * Erişim kuralları:
+ *  - ADMIN/COORDINATOR → tüm trip'leri görebilir.
+ *  - DRIVER           → sadece kendi trip'lerini görebilir.
+ *  - PASSENGER        → sadece kendi adına oluşturulmuş trip'leri görebilir.
+ */
+router.get(
+  "/:id",
+  authMiddleware,
+  requireRole("PASSENGER", "DRIVER", "COORDINATOR", "ADMIN"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const trip = await Trip.findById(id)
+        .populate("request")
+        .populate("driver")
+        .populate("passenger")
+        .populate("vehicle");
+
+      if (!trip) {
+        return res.status(404).json({ message: "Trip not found" });
+      }
+
+      const role = req.user.role;
+      const userId = req.user.userId;
+
+      let allowed = false;
+
+      // Admin / Coordinator → full access
+      if (role === "ADMIN" || role === "COORDINATOR") {
+        allowed = true;
+      } else if (role === "DRIVER") {
+        const driverField =
+          trip.driver && trip.driver._id ? trip.driver._id : trip.driver;
+        if (driverField && driverField.toString() === userId) {
+          allowed = true;
+        }
+      } else if (role === "PASSENGER") {
+        const passengerField =
+          trip.passenger && trip.passenger._id
+            ? trip.passenger._id
+            : trip.passenger;
+        if (passengerField && passengerField.toString() === userId) {
+          allowed = true;
+        }
+      }
+
+      if (!allowed) {
+        return res
+          .status(403)
+          .json({ message: "You are not allowed to view this trip" });
+      }
+
+      return res.json({ trip });
+    } catch (err) {
+      console.error("Get trip detail error:", err);
+      return res
+        .status(500)
+        .json({ message: "Server error while fetching trip detail" });
+    }
+  }
+);
+
+/**
  * GET /api/trips/my
  * DRIVER kendi trip'lerini listeler.
  */

@@ -1,6 +1,7 @@
 // src/routes/requestRoutes.js
 const express = require("express");
 const Request = require("../models/Request");
+const Trip = require("../models/Trip");                 // YENİ
 const authMiddleware = require("../middleware/authMiddleware");
 const requireRole = require("../middleware/roleMiddleware");
 
@@ -96,6 +97,81 @@ router.get(
       return res.status(500).json({
         message: "Server error while fetching available requests",
       });
+    }
+  }
+);
+
+/**
+ * GET /api/requests/:id
+ * Tek bir request'in detayını döner.
+ *
+ * Erişim kuralları:
+ *  - ADMIN/COORDINATOR → her request'i görebilir.
+ *  - PASSENGER        → sadece kendisine ait request'i görebilir.
+ *  - DRIVER           → sadece kendisinin aldığı request'leri görebilir
+ *                       (yani bu request için driver'ın trip'i varsa).
+ *
+ * Dönüş:
+ *  { request, trips: [...] }  // trips: bu request'e bağlı tüm trip kayıtları
+ */
+router.get(
+  "/:id",
+  authMiddleware,
+  requireRole("PASSENGER", "DRIVER", "COORDINATOR", "ADMIN"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // 1) Request'i bul
+      const request = await Request.findById(id).populate("passenger");
+      if (!request) {
+        return res.status(404).json({ message: "Request not found" });
+      }
+
+      // 2) Bu request'e bağlı tüm trip'leri çek
+      const trips = await Trip.find({ request: request._id })
+        .populate("driver")
+        .populate("vehicle")
+        .lean();
+
+      const role = req.user.role;
+      const userId = req.user.userId;
+
+      // 3) Yetki kontrolü
+      let allowed = false;
+
+      // Admin ve coordinator her şeyi görebilir
+      if (role === "ADMIN" || role === "COORDINATOR") {
+        allowed = true;
+      } else if (role === "PASSENGER") {
+        // Sadece kendine ait request'i görebilir
+        if (request.passenger.toString() === userId) {
+          allowed = true;
+        }
+      } else if (role === "DRIVER") {
+        // Bu request için kendisinin trip'i var mı?
+        const hasOwnTrip = trips.some((t) => {
+          const driverField = t.driver && t.driver._id ? t.driver._id : t.driver;
+          return driverField && driverField.toString() === userId;
+        });
+
+        if (hasOwnTrip) {
+          allowed = true;
+        }
+      }
+
+      if (!allowed) {
+        return res
+          .status(403)
+          .json({ message: "You are not allowed to view this request" });
+      }
+
+      return res.json({ request, trips });
+    } catch (err) {
+      console.error("Get request detail error:", err);
+      return res
+        .status(500)
+        .json({ message: "Server error while fetching request detail" });
     }
   }
 );
