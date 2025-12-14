@@ -28,24 +28,27 @@ async function getApprovedDriverAndVerifiedVehicle(userId) {
   if (!driver) {
     throw new Error("Driver profile does not exist for this user");
   }
-
   if (!driver.isApproved) {
     throw new Error("Driver is not approved yet");
   }
-
   if (driver.isActive === false) {
     throw new Error("Driver is not active");
   }
 
+  // availabilityStatus yoksa (eski kayıt) AVAILABLE gibi kabul ediyoruz
   const vehicle = await Vehicle.findOne({
     ownerDriver: driver._id,
     isVerified: true,
     isActive: true,
+    $or: [
+      { availabilityStatus: "AVAILABLE" },
+      { availabilityStatus: { $exists: false } },
+    ],
   });
 
   if (!vehicle) {
     throw new Error(
-      "No verified and active vehicle found for this driver. Please contact coordinator."
+      "No verified, active and AVAILABLE vehicle found for this driver. Please contact coordinator."
     );
   }
 
@@ -112,6 +115,13 @@ router.post(
         { new: true, session }
       );
 
+      // Araç artık müsait değil
+      await Vehicle.updateOne(
+        { _id: vehicle._id },
+        { $set: { availabilityStatus: "ON_TRIP" } },
+        { session }
+      );
+
       if (!request) {
         await session.abortTransaction();
         return res.status(400).json({
@@ -150,6 +160,19 @@ router.post(
         if (session) await session.abortTransaction();
       } catch (_) {}
 
+      // MongoDB standalone ise transaction çalışmaz (replica set / Atlas gerekir)
+      if (err && typeof err.message === "string") {
+        const msg = err.message.toLowerCase();
+        if (msg.includes("transaction numbers are only allowed") || msg.includes("replica set")) {
+          return res.status(500).json({
+            message:
+              "MongoDB transactions require a replica set (or Atlas). Please run MongoDB as a replica set or use Atlas cluster.",
+            hint:
+              "If you are using local MongoDB, start it with --replSet and initiate rs.initiate().",
+          });
+        }
+      }
+      
       // Duplicate key (unique index) yakala → yarış koşulunda “temiz” hata dön
       if (err && err.code === 11000) {
         // Hangi unique patladı?
@@ -195,27 +218,31 @@ router.patch(
   authMiddleware,
   requireRole("DRIVER"),
   async (req, res) => {
+    let session = null;
+
     try {
-      const trip = await Trip.findById(req.params.id).populate("request");
+      session = await mongoose.startSession();
+      session.startTransaction();
+
+      const trip = await Trip.findById(req.params.id, null, { session }).populate("request");
       if (!trip) {
+        await session.abortTransaction();
         return res.status(404).json({ message: "Trip not found" });
       }
 
-      // Driver profilini bul (req.user.userId => User._id)
-      const driverProfile = await Driver.findOne({ user: req.user.userId });
+      const driverProfile = await Driver.findOne({ user: req.user.userId }, null, { session });
       if (!driverProfile) {
+        await session.abortTransaction();
         return res.status(400).json({ message: "Driver profile not found" });
       }
 
-      // Trip gerçekten bu driver'a mı ait?
       if (String(trip.driver) !== String(driverProfile._id)) {
-        return res
-          .status(403)
-          .json({ message: "You are not the driver of this trip" });
+        await session.abortTransaction();
+        return res.status(403).json({ message: "You are not the driver of this trip" });
       }
 
-      // Sadece ON_GOING trip tamamlanabilir
       if (trip.status !== "ON_GOING") {
+        await session.abortTransaction();
         return res.status(400).json({
           message: `Only ON_GOING trips can be completed (current: ${trip.status})`,
         });
@@ -224,22 +251,37 @@ router.patch(
       // 1) Trip'i tamamla
       trip.status = "COMPLETED";
       trip.completedAt = new Date();
-      await trip.save();
+      await trip.save({ session });
 
-      // 2) Bağlı request'i tamamla
+      // 2) Request'i tamamla
       if (trip.request) {
         trip.request.status = "COMPLETED";
-        await trip.request.save();
+        await trip.request.save({ session });
       }
 
-      // 3) Driver istatistiğini güncelle (totalTrips + 1)
+      // 3) Aracı tekrar AVAILABLE yap
+      await Vehicle.updateOne(
+        { _id: trip.vehicle },
+        { $set: { availabilityStatus: "AVAILABLE" } },
+        { session }
+      );
+
+      // 4) Driver istatistiği
       driverProfile.totalTrips = (driverProfile.totalTrips || 0) + 1;
-      await driverProfile.save();
+      await driverProfile.save({ session });
+
+      await session.commitTransaction();
 
       return res.json({ trip });
     } catch (err) {
+      try {
+        if (session) await session.abortTransaction();
+      } catch (_) {}
+
       console.error("Complete trip error:", err);
       return res.status(500).json({ message: "Server error while completing trip" });
+    } finally {
+      if (session) session.endSession();
     }
   }
 );
@@ -260,51 +302,68 @@ router.patch(
   authMiddleware,
   requireRole("DRIVER"),
   async (req, res) => {
+    let session = null;
+
     try {
-      const trip = await Trip.findById(req.params.id).populate("request");
+      session = await mongoose.startSession();
+      session.startTransaction();
+
+      const trip = await Trip.findById(req.params.id, null, { session }).populate("request");
       if (!trip) {
+        await session.abortTransaction();
         return res.status(404).json({ message: "Trip not found" });
       }
 
-      // Driver profilini bul
-      const driverProfile = await Driver.findOne({ user: req.user.userId });
+      const driverProfile = await Driver.findOne({ user: req.user.userId }, null, { session });
       if (!driverProfile) {
+        await session.abortTransaction();
         return res.status(400).json({ message: "Driver profile not found" });
       }
 
-      // Trip gerçekten bu driver'a mı ait?
       if (String(trip.driver) !== String(driverProfile._id)) {
-        return res
-          .status(403)
-          .json({ message: "You are not the driver of this trip" });
+        await session.abortTransaction();
+        return res.status(403).json({ message: "You are not the driver of this trip" });
       }
 
-      // COMPLETED trip iptal edilemez
       if (trip.status === "COMPLETED") {
-        return res
-          .status(400)
-          .json({ message: "Completed trips cannot be cancelled" });
+        await session.abortTransaction();
+        return res.status(400).json({ message: "COMPLETED trip cannot be cancelled" });
       }
 
-      // Zaten CANCELLED ise tekrar iptal etme (idempotent)
       if (trip.status === "CANCELLED") {
-        return res.json({ trip });
+        await session.commitTransaction();
+        return res.json({ trip }); // idempotent
       }
 
-      // Trip'i iptal et
+      // 1) Trip iptal
       trip.status = "CANCELLED";
-      await trip.save();
+      await trip.save({ session });
 
-      // Bağlı request'i iptal et (COMPLETED değilse)
+      // 2) Request iptal (COMPLETED değilse)
       if (trip.request && trip.request.status !== "COMPLETED") {
         trip.request.status = "CANCELLED";
-        await trip.request.save();
+        await trip.request.save({ session });
       }
+
+      // 3) Aracı tekrar AVAILABLE yap
+      await Vehicle.updateOne(
+        { _id: trip.vehicle },
+        { $set: { availabilityStatus: "AVAILABLE" } },
+        { session }
+      );
+
+      await session.commitTransaction();
 
       return res.json({ trip });
     } catch (err) {
+      try {
+        if (session) await session.abortTransaction();
+      } catch (_) {}
+
       console.error("Cancel trip error:", err);
       return res.status(500).json({ message: "Server error while cancelling trip" });
+    } finally {
+      if (session) session.endSession();
     }
   }
 );
