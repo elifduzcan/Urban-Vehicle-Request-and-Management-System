@@ -434,4 +434,194 @@ router.get(
   }
 );
 
+/**
+ * PATCH /api/admin/requests/:id/status
+ * ADMIN / COORDINATOR → request statüsünü manuel günceller.
+ *
+ * Body:
+ *  { "status": "PENDING" | "ACCEPTED" | "COMPLETED" | "CANCELLED" }
+ *
+ * Not:
+ *  - Status değişikliği, ilgili trip kayıtlarına da yansıtılmaya çalışılır.
+ *    (Örneğin request CANCELLED olursa, ON_GOING trip'ler CANCELLED yapılır.)
+ */
+router.patch(
+  "/requests/:id/status",
+  authMiddleware,
+  requireRole("ADMIN", "COORDINATOR"),
+  async (req, res) => {
+    try {
+      const { status } = req.body;
+      const allowedStatuses = ["PENDING", "ACCEPTED", "COMPLETED", "CANCELLED"];
+
+      if (!status || !allowedStatuses.includes(status)) {
+        return res.status(400).json({
+          message:
+            "Invalid status. Allowed values: " + allowedStatuses.join(", "),
+        });
+      }
+
+      const request = await Request.findById(req.params.id);
+      if (!request) {
+        return res.status(404).json({ message: "Request not found" });
+      }
+
+      const previousStatus = request.status;
+      request.status = status;
+      await request.save();
+
+      // İlgili trip'ler ile basit senkronizasyon
+      const trips = await Trip.find({ request: request._id });
+
+      for (const trip of trips) {
+        // CANCELLED request → ON_GOING trip'leri de CANCELLED yap
+        if (status === "CANCELLED" && trip.status === "ON_GOING") {
+          trip.status = "CANCELLED";
+          trip.completedAt = new Date();
+          await trip.save();
+        }
+
+        // COMPLETED request → ON_GOING trip'leri COMPLETED yap
+        if (status === "COMPLETED" && trip.status === "ON_GOING") {
+          const prevTripStatus = trip.status;
+          trip.status = "COMPLETED";
+          trip.completedAt = new Date();
+          await trip.save();
+
+          // Driver istatistiği (daha önce COMPLETED değilse artır)
+          if (prevTripStatus !== "COMPLETED") {
+            try {
+              const driverProfile = await Driver.findOne({ user: trip.driver });
+              if (driverProfile) {
+                driverProfile.totalTrips =
+                  (driverProfile.totalTrips || 0) + 1;
+                await driverProfile.save();
+              }
+            } catch (statsErr) {
+              console.error(
+                "Error while updating driver stats from admin request override:",
+                statsErr
+              );
+            }
+          }
+        }
+      }
+
+      return res.json({
+        request,
+        previousStatus,
+        updatedStatus: status,
+      });
+    } catch (err) {
+      console.error("Admin override request status error:", err);
+      return res.status(500).json({
+        message: "Server error while overriding request status",
+      });
+    }
+  }
+);
+
+/**
+ * PATCH /api/admin/trips/:id/status
+ * ADMIN / COORDINATOR → trip statüsünü manuel günceller.
+ *
+ * Body:
+ *  { "status": "ON_GOING" | "COMPLETED" | "CANCELLED" }
+ *
+ * Not:
+ *  - Status değişikliği Request kaydına da yansıtılmaya çalışılır.
+ *  - Trip COMPLETED'e çekilirse ve daha önce COMPLETED değilse,
+ *    driver.totalTrips bir artırılır.
+ */
+router.patch(
+  "/trips/:id/status",
+  authMiddleware,
+  requireRole("ADMIN", "COORDINATOR"),
+  async (req, res) => {
+    try {
+      const { status } = req.body;
+      const allowedStatuses = ["ON_GOING", "COMPLETED", "CANCELLED"];
+
+      if (!status || !allowedStatuses.includes(status)) {
+        return res.status(400).json({
+          message:
+            "Invalid status. Allowed values: " + allowedStatuses.join(", "),
+        });
+      }
+
+      const trip = await Trip.findById(req.params.id);
+      if (!trip) {
+        return res.status(404).json({ message: "Trip not found" });
+      }
+
+      const previousStatus = trip.status;
+      trip.status = status;
+
+      if (status === "COMPLETED" || status === "CANCELLED") {
+        trip.completedAt = new Date();
+      } else if (status === "ON_GOING") {
+        // Tekrar ON_GOING'e çekildiyse completedAt'i sıfırlayabiliriz
+        trip.completedAt = null;
+      }
+
+      await trip.save();
+
+      // Bağlı Request statüsünü de uyarlamaya çalış
+      let updatedRequest = null;
+      try {
+        if (trip.request) {
+          const reqDoc = await Request.findById(trip.request);
+          if (reqDoc) {
+            if (status === "COMPLETED") {
+              reqDoc.status = "COMPLETED";
+            } else if (status === "CANCELLED") {
+              reqDoc.status = "CANCELLED";
+            } else if (status === "ON_GOING") {
+              // ON_GOING trip en az ACCEPTED bir request gerektirir
+              if (reqDoc.status === "PENDING") {
+                reqDoc.status = "ACCEPTED";
+              }
+            }
+            await reqDoc.save();
+            updatedRequest = reqDoc;
+          }
+        }
+      } catch (reqErr) {
+        console.error(
+          "Error while syncing request status from admin trip override:",
+          reqErr
+        );
+      }
+
+      // Driver istatistik güncelleme (yalnızca ilk kez COMPLETED oluyorsa)
+      if (previousStatus !== "COMPLETED" && status === "COMPLETED") {
+        try {
+          const driverProfile = await Driver.findOne({ user: trip.driver });
+          if (driverProfile) {
+            driverProfile.totalTrips = (driverProfile.totalTrips || 0) + 1;
+            await driverProfile.save();
+          }
+        } catch (statsErr) {
+          console.error(
+            "Error while updating driver stats from admin trip override:",
+            statsErr
+          );
+        }
+      }
+
+      return res.json({
+        trip,
+        request: updatedRequest,
+        previousStatus,
+        updatedStatus: status,
+      });
+    } catch (err) {
+      console.error("Admin override trip status error:", err);
+      return res.status(500).json({
+        message: "Server error while overriding trip status",
+      });
+    }
+  }
+);
+
 module.exports = router;
