@@ -66,4 +66,19 @@ const tripSchema = new mongoose.Schema(
   }
 );
 
+// 1) Aynı request için 1 tane trip olsun
+tripSchema.index({ request: 1 }, { unique: true });
+
+// 2) Aynı driver için aynı anda sadece 1 ON_GOING trip olsun
+tripSchema.index(
+  { driver: 1, status: 1 },
+  { unique: true, partialFilterExpression: { status: "ON_GOING" } }
+);
+
+// 3) Aynı araç için aynı anda sadece 1 ON_GOING trip olsun
+tripSchema.index(
+  { vehicle: 1, status: 1 },
+  { unique: true, partialFilterExpression: { status: "ON_GOING" } }
+);
+
 module.exports = mongoose.model("Trip", tripSchema);

@@ -1,4 +1,6 @@
 // src/routes/tripRoutes.js
+const mongoose = require("mongoose");
+
 const express = require("express");
 const Trip = require("../models/Trip");
 const Request = require("../models/Request");
@@ -66,6 +68,8 @@ router.post(
   authMiddleware,
   requireRole("DRIVER"),
   async (req, res) => {
+    let session;
+
     try {
       const { requestId } = req.body;
 
@@ -73,7 +77,7 @@ router.post(
         return res.status(400).json({ message: "requestId is required" });
       }
 
-      // 1) Driver onaylı mı ve doğrulanmış/aktif aracı var mı?
+      // 1) Driver + Vehicle uygunluğu
       let driverInfo;
       try {
         driverInfo = await getApprovedDriverAndVerifiedVehicle(req.user.userId);
@@ -83,52 +87,57 @@ router.post(
 
       const { driver, vehicle } = driverInfo;
 
-      // 2) Aynı sürücünün ON_GOING trip'i var mı? (Trip.driver => Driver._id)
-      const existingTrip = await Trip.findOne({
-        driver: driver._id,
-        status: "ON_GOING",
-      });
+      // 2) Transaction başlat (Atlas/replica set üzerinde çalışır)
+      session = await mongoose.startSession();
+      session.startTransaction();
+
+      // 3) Aynı driver için ON_GOING var mı? (Ek kontrol)
+      //    Asıl garanti zaten Trip modelindeki partial unique index.
+      const existingTrip = await Trip.findOne(
+        { driver: driver._id, status: "ON_GOING" },
+        null,
+        { session }
+      );
 
       if (existingTrip) {
-        return res
-          .status(400)
-          .json({ message: "Driver already has an ongoing trip" });
+        await session.abortTransaction();
+        return res.status(400).json({ message: "Driver already has an ongoing trip" });
       }
 
-      // 3) Request'i getir
-      const request = await Request.findById(requestId);
+      // 4) Request’i atomik şekilde PENDING -> ACCEPTED çevir
+      //    Burada findById + if yerine tek DB operasyonu kullanıyoruz.
+      const request = await Request.findOneAndUpdate(
+        { _id: requestId, status: "PENDING" },
+        { $set: { status: "ACCEPTED" } },
+        { new: true, session }
+      );
+
       if (!request) {
-        return res.status(404).json({ message: "Request not found" });
-      }
-
-      // 4) Sadece PENDING request kabul edilebilir
-      if (request.status !== "PENDING") {
+        await session.abortTransaction();
         return res.status(400).json({
-          message: `Request is not available (current status: ${request.status})`,
+          message: "Request is not available (not found or not in PENDING status)",
         });
       }
 
-      // 5) Request'i ACCEPTED'a çek
-      request.status = "ACCEPTED";
-      await request.save();
+      // 5) Trip oluştur (unique index’ler burada DB seviyesinde koruma sağlar)
+      const trip = await Trip.create(
+        [
+          {
+            request: request._id,
+            passenger: request.passenger,
+            driver: driver._id,
+            vehicle: vehicle._id,
+            status: "ON_GOING",
+          },
+        ],
+        { session }
+      );
 
-      // 6) Trip oluştur
-      const trip = await Trip.create({
-        request: request._id,
-        passenger: request.passenger, // passenger => User._id
-        driver: driver._id,           // driver => Driver._id
-        vehicle: vehicle._id,
-        status: "ON_GOING",
-      });
+      // 6) Transaction commit
+      await session.commitTransaction();
 
-      // 7) Vehicle durumunu güncelle (opsiyonel ama doğru akış)
-      // Senin Vehicle modelinde status enum yok, bu yüzden sadece isActive üzerinden gidelim.
-      // Eğer ileride "AVAILABLE / ON_TRIP" gibi bir alan ekleyeceksen burada set edebilirsin.
-      vehicle.isActive = true;
-      await vehicle.save();
-
-      // 8) Response
-      const populatedTrip = await Trip.findById(trip._id)
+      // 7) Response (populate)
+      const populatedTrip = await Trip.findById(trip[0]._id)
         .populate("request")
         .populate({ path: "driver", populate: { path: "user" } })
         .populate("passenger")
@@ -136,10 +145,38 @@ router.post(
 
       return res.status(201).json({ trip: populatedTrip });
     } catch (err) {
+      // Transaction açıksa rollback
+      try {
+        if (session) await session.abortTransaction();
+      } catch (_) {}
+
+      // Duplicate key (unique index) yakala → yarış koşulunda “temiz” hata dön
+      if (err && err.code === 11000) {
+        // Hangi unique patladı?
+        const key = err.keyPattern || {};
+        if (key.request) {
+          return res.status(409).json({
+            message: "This request has already been accepted by another driver.",
+          });
+        }
+        if (key.driver) {
+          return res.status(409).json({
+            message: "Driver already has an ongoing trip (DB constraint).",
+          });
+        }
+        if (key.vehicle) {
+          return res.status(409).json({
+            message: "Vehicle already has an ongoing trip (DB constraint).",
+          });
+        }
+
+        return res.status(409).json({ message: "Duplicate constraint violation." });
+      }
+
       console.error("Create trip error:", err);
-      return res
-        .status(500)
-        .json({ message: "Server error while creating trip" });
+      return res.status(500).json({ message: "Server error while creating trip" });
+    } finally {
+      if (session) session.endSession();
     }
   }
 );
