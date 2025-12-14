@@ -13,6 +13,9 @@ import AdminPendingVehicles from "./pages/AdminPendingVehicles";
 import AdminGlobalRequests from "./pages/AdminGlobalRequests";
 import AdminGlobalTrips from "./pages/AdminGlobalTrips";
 
+import HomePage from "./pages/Home";
+import PassengerTrips from "./pages/PassengerTrips"; // ✅ yeni trip history sayfası
+
 // Küçük helper: tarih formatlayıcı (admin & coordinator sayfalarında kullanacağız)
 export function formatDate(iso) {
   if (!iso) return "-";
@@ -78,9 +81,14 @@ export default function App() {
 
             {/* Passenger linkleri */}
             {user.role === "PASSENGER" && (
-              <Link to="/passenger" style={{ marginRight: 12 }}>
-                Passenger Dashboard
-              </Link>
+              <>
+                <Link to="/passenger" style={{ marginRight: 12 }}>
+                  Passenger Dashboard
+                </Link>
+                <Link to="/passenger/trips" style={{ marginRight: 12 }}>
+                  Trip History
+                </Link>
+              </>
             )}
 
             {/* Driver linkleri */}
@@ -142,7 +150,8 @@ export default function App() {
 
       {/* ROUTES */}
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        {/* / artık HomePage → giriş yapmışsa role göre redirect, değilse login */}
+        <Route path="/" element={<HomePage />} />
 
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -153,6 +162,16 @@ export default function App() {
           element={
             <ProtectedRoute allowedRoles={["PASSENGER"]}>
               <PassengerDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Passenger Trip History */}
+        <Route
+          path="/passenger/trips"
+          element={
+            <ProtectedRoute allowedRoles={["PASSENGER"]}>
+              <PassengerTrips />
             </ProtectedRoute>
           }
         />

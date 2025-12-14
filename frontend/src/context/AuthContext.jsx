@@ -34,9 +34,12 @@ export function AuthProvider({ children }) {
     fetchMe();
   }, []);
 
+  // src/context/AuthContext.jsx (sadece ilgili kısım)
   const login = (userData, token) => {
+  if (token) {
     localStorage.setItem("token", token);
-    setUser(userData);
+  }
+  setUser(userData);
   };
 
   const logout = () => {

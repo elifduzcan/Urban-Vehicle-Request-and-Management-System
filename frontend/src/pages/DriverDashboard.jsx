@@ -17,34 +17,39 @@ export default function DriverDashboard() {
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
-  // Sayfa açıldığında gerekli her şeyi yükle
+  // Tarih formatlayıcı
+  const formatDate = (iso) => {
+    if (!iso) return "-";
+    const d = new Date(iso);
+    return d.toLocaleString();
+  };
+
+  // Sayfa açıldığında her şeyi yükle
   useEffect(() => {
     async function init() {
       setLoading(true);
       setError("");
       try {
-        // 1) Sürücü profili
+        // 1) Driver profili
         const driverRes = await api.get("/drivers/me");
         setDriverProfile(driverRes.data);
 
         // 2) Kendi araçları
         const vehiclesRes = await api.get("/vehicles/my");
-        const list = Array.isArray(vehiclesRes.data)
-          ? vehiclesRes.data
-          : vehiclesRes.data?.vehicles || [];
-
+        const raw = vehiclesRes.data;
+        const list = Array.isArray(raw) ? raw : raw?.vehicles || [];
         setVehicles(list);
 
         // Varsayılan olarak ilk doğrulanmış aracı seç
-        const verifiedVehicles = list.filter((v) => v.isVerified);
-        if (verifiedVehicles.length > 0) {
-          setSelectedVehicleId(verifiedVehicles[0]._id);
+        const verified = list.filter((v) => v.isVerified);
+        if (verified.length > 0) {
+          setSelectedVehicleId(verified[0]._id);
         }
 
         // 3) Uygun (PENDING) talepler
         await fetchAvailableRequests();
 
-        // 4) Kendi trip'leri
+        // 4) Kendi trip’leri
         await fetchMyTrips();
       } catch (err) {
         console.error("Error initializing driver dashboard", err);
@@ -68,7 +73,6 @@ export default function DriverDashboard() {
       setAvailableRequests(list);
     } catch (err) {
       console.error("Error fetching available requests", err);
-      // burada error'ı ekrana basmak zorunda değiliz, genel hata mesajı zaten var
     }
   }
 
@@ -87,6 +91,7 @@ export default function DriverDashboard() {
     setSelectedVehicleId(e.target.value);
   };
 
+  // PENDING request kabul → trip oluştur (status = ON_GOING)
   async function handleAcceptRequest(requestId) {
     if (!selectedVehicleId) {
       setError("You must select a verified vehicle before accepting a request.");
@@ -98,12 +103,13 @@ export default function DriverDashboard() {
     setActionLoading(true);
 
     try {
+      // Backend şu an vehicleId’i kullanmıyor ama ileride kullanabilir diye gönderebiliriz.
       await api.post("/trips", {
         requestId,
         vehicleId: selectedVehicleId,
       });
 
-      setSuccessMsg("Request accepted. Trip created.");
+      setSuccessMsg("Request accepted. Trip created and started (ON_GOING).");
       await Promise.all([fetchAvailableRequests(), fetchMyTrips()]);
     } catch (err) {
       console.error("Error accepting request", err);
@@ -116,26 +122,7 @@ export default function DriverDashboard() {
     }
   }
 
-  async function handleStartTrip(tripId) {
-    setError("");
-    setSuccessMsg("");
-    setActionLoading(true);
-
-    try {
-      await api.patch(`/trips/${tripId}/start`);
-      setSuccessMsg("Trip started.");
-      await fetchMyTrips();
-    } catch (err) {
-      console.error("Error starting trip", err);
-      setError(
-        err.response?.data?.message ||
-          "Failed to start trip. Please try again."
-      );
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
+  // ON_GOING trip → COMPLETED
   async function handleCompleteTrip(tripId) {
     setError("");
     setSuccessMsg("");
@@ -156,10 +143,26 @@ export default function DriverDashboard() {
     }
   }
 
-  const formatDate = (iso) => {
-    if (!iso) return "";
-    return new Date(iso).toLocaleString();
-  };
+  // ON_GOING trip → CANCELLED
+  async function handleCancelTrip(tripId) {
+    setError("");
+    setSuccessMsg("");
+    setActionLoading(true);
+
+    try {
+      await api.patch(`/trips/${tripId}/cancel`);
+      setSuccessMsg("Trip cancelled.");
+      await fetchMyTrips();
+    } catch (err) {
+      console.error("Error cancelling trip", err);
+      setError(
+        err.response?.data?.message ||
+          "Failed to cancel trip. Please try again."
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -236,10 +239,9 @@ export default function DriverDashboard() {
               style={{ padding: 8, minWidth: 260 }}
             >
               <option value="">Select vehicle</option>
-              {vehicles.map((v) => (
+              {verifiedVehicles.map((v) => (
                 <option key={v._id} value={v._id}>
-                  {v.plate} – {v.model}{" "}
-                  {v.isVerified ? "(Verified)" : "(Pending)"}
+                  {(v.plateNumber || v.plate || "").toUpperCase()} – {v.model}
                 </option>
               ))}
             </select>
@@ -287,56 +289,32 @@ export default function DriverDashboard() {
                 <th style={{ borderBottom: "1px solid #ccc", textAlign: "left" }}>
                   Created At
                 </th>
-                <th style={{ borderBottom: "1px solid #ccc" }}>Action</th>
+                <th style={{ borderBottom: "1px solid #ccc", textAlign: "left" }}>
+                  Status
+                </th>
+                <th style={{ borderBottom: "1px solid #ccc", textAlign: "left" }}>
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
-              {availableRequests.map((req) => (
-                <tr key={req._id}>
-                  <td
-                    style={{
-                      borderBottom: "1px solid #eee",
-                      padding: "4px 0",
-                    }}
-                  >
-                    {req.passenger?.name || req.passengerName || "-"}
+              {availableRequests.map((r) => (
+                <tr key={r._id}>
+                  <td style={{ padding: "6px 4px" }}>
+                    {r.passenger?.name || r.passengerName || "-"}
                   </td>
-                  <td
-                    style={{
-                      borderBottom: "1px solid #eee",
-                      padding: "4px 0",
-                    }}
-                  >
-                    {req.pickupAddress}
+                  <td style={{ padding: "6px 4px" }}>{r.pickupAddress}</td>
+                  <td style={{ padding: "6px 4px" }}>{r.dropoffAddress}</td>
+                  <td style={{ padding: "6px 4px" }}>
+                    {formatDate(r.createdAt)}
                   </td>
-                  <td
-                    style={{
-                      borderBottom: "1px solid #eee",
-                      padding: "4px 0",
-                    }}
-                  >
-                    {req.dropoffAddress}
-                  </td>
-                  <td
-                    style={{
-                      borderBottom: "1px solid #eee",
-                      padding: "4px 0",
-                    }}
-                  >
-                    {formatDate(req.createdAt)}
-                  </td>
-                  <td
-                    style={{
-                      borderBottom: "1px solid #eee",
-                      padding: "4px 0",
-                      textAlign: "center",
-                    }}
-                  >
+                  <td style={{ padding: "6px 4px" }}>{r.status}</td>
+                  <td style={{ padding: "6px 4px" }}>
                     <button
+                      onClick={() => handleAcceptRequest(r._id)}
                       disabled={actionLoading || !selectedVehicleId}
-                      onClick={() => handleAcceptRequest(req._id)}
                     >
-                      Accept
+                      {actionLoading ? "Processing..." : "Accept"}
                     </button>
                   </td>
                 </tr>
@@ -368,93 +346,67 @@ export default function DriverDashboard() {
             <thead>
               <tr>
                 <th style={{ borderBottom: "1px solid #ccc", textAlign: "left" }}>
-                  Request
+                  Passenger
                 </th>
                 <th style={{ borderBottom: "1px solid #ccc", textAlign: "left" }}>
-                  Vehicle
+                  Pickup
+                </th>
+                <th style={{ borderBottom: "1px solid #ccc", textAlign: "left" }}>
+                  Dropoff
                 </th>
                 <th style={{ borderBottom: "1px solid #ccc", textAlign: "left" }}>
                   Status
                 </th>
                 <th style={{ borderBottom: "1px solid #ccc", textAlign: "left" }}>
-                  Created
+                  Started At
                 </th>
                 <th style={{ borderBottom: "1px solid #ccc", textAlign: "left" }}>
-                  Updated
+                  Completed At
                 </th>
-                <th style={{ borderBottom: "1px solid #ccc" }}>Action</th>
+                <th style={{ borderBottom: "1px solid #ccc", textAlign: "left" }}>
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
-              {trips.map((trip) => (
-                <tr key={trip._id}>
-                  <td
-                    style={{
-                      borderBottom: "1px solid #eee",
-                      padding: "4px 0",
-                    }}
-                  >
-                    {trip.request?.pickupAddress} →{" "}
-                    {trip.request?.dropoffAddress}
+              {trips.map((t) => (
+                <tr key={t._id}>
+                  <td style={{ padding: "6px 4px" }}>
+                    {t.request?.passenger?.name || t.passengerName || "-"}
                   </td>
-                  <td
-                    style={{
-                      borderBottom: "1px solid #eee",
-                      padding: "4px 0",
-                    }}
-                  >
-                    {trip.vehicle?.plate} – {trip.vehicle?.model}
+                  <td style={{ padding: "6px 4px" }}>
+                    {t.request?.pickupAddress || t.pickupAddress}
                   </td>
-                  <td
-                    style={{
-                      borderBottom: "1px solid #eee",
-                      padding: "4px 0",
-                      textTransform: "capitalize",
-                    }}
-                  >
-                    {trip.status}
+                  <td style={{ padding: "6px 4px" }}>
+                    {t.request?.dropoffAddress || t.dropoffAddress}
                   </td>
-                  <td
-                    style={{
-                      borderBottom: "1px solid #eee",
-                      padding: "4px 0",
-                    }}
-                  >
-                    {formatDate(trip.createdAt)}
+                  <td style={{ padding: "6px 4px" }}>{t.status}</td>
+                  <td style={{ padding: "6px 4px" }}>
+                    {formatDate(t.startedAt)}
                   </td>
-                  <td
-                    style={{
-                      borderBottom: "1px solid #eee",
-                      padding: "4px 0",
-                    }}
-                  >
-                    {formatDate(trip.updatedAt)}
+                  <td style={{ padding: "6px 4px" }}>
+                    {formatDate(t.completedAt)}
                   </td>
-                  <td
-                    style={{
-                      borderBottom: "1px solid #eee",
-                      padding: "4px 0",
-                      textAlign: "center",
-                    }}
-                  >
-                    {trip.status === "ACCEPTED" && (
-                      <button
-                        disabled={actionLoading}
-                        onClick={() => handleStartTrip(trip._id)}
-                      >
-                        Start
-                      </button>
+                  <td style={{ padding: "6px 4px" }}>
+                    {t.status === "ON_GOING" ? (
+                      <>
+                        <button
+                          onClick={() => handleCompleteTrip(t._id)}
+                          disabled={actionLoading}
+                          style={{ marginRight: 8 }}
+                        >
+                          {actionLoading ? "..." : "Complete"}
+                        </button>
+                        <button
+                          onClick={() => handleCancelTrip(t._id)}
+                          disabled={actionLoading}
+                        >
+                          {actionLoading ? "..." : "Cancel"}
+                        </button>
+                      </>
+                    ) : (
+                      <span>-</span>
                     )}
-                    {trip.status === "ON_GOING" && (
-                      <button
-                        disabled={actionLoading}
-                        onClick={() => handleCompleteTrip(trip._id)}
-                      >
-                        Complete
-                      </button>
-                    )}
-                    {trip.status !== "ACCEPTED" &&
-                      trip.status !== "ON_GOING" && <span>-</span>}
                   </td>
                 </tr>
               ))}
