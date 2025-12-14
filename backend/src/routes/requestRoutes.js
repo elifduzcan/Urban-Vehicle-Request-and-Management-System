@@ -170,9 +170,9 @@ router.get(
         return res.status(404).json({ message: "Request not found" });
       }
 
-      // 2) Bu request'e bağlı tüm trip'leri çek
+      // 2) Bu request'e bağlı tüm trip'leri çek (driver.user da populate!)
       const trips = await Trip.find({ request: request._id })
-        .populate("driver")
+        .populate({ path: "driver", populate: { path: "user", select: "_id" } })
         .populate("vehicle")
         .lean();
 
@@ -187,14 +187,19 @@ router.get(
         allowed = true;
       } else if (role === "PASSENGER") {
         // Sadece kendine ait request'i görebilir
-        if (request.passenger.toString() === userId) {
+        const passengerId =
+          request.passenger && request.passenger._id
+            ? request.passenger._id.toString()
+            : request.passenger.toString();
+
+        if (passengerId === userId) {
           allowed = true;
         }
       } else if (role === "DRIVER") {
-        // Bu request için kendisinin trip'i var mı?
+        // Driver, bu request'e ait trip'lerden birinde kendi userId'si ile eşleşmeli
         const hasOwnTrip = trips.some((t) => {
-          const driverField = t.driver && t.driver._id ? t.driver._id : t.driver;
-          return driverField && driverField.toString() === userId;
+          const driverUserId = t.driver?.user?._id;
+          return driverUserId && driverUserId.toString() === userId;
         });
 
         if (hasOwnTrip) {
