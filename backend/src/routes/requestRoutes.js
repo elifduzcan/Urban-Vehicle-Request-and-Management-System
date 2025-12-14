@@ -54,6 +54,12 @@ router.post("/", authMiddleware, requireRole("PASSENGER"), async (req, res) => {
 /**
  * GET /api/requests/my
  * PASSENGER kendi taleplerini görür.
+ *
+ * Opsiyonel query parametreleri:
+ *  - status: PENDING / ACCEPTED / COMPLETED / CANCELLED
+ *  - from, to: tarih aralığı (ISO string, createdAt'e göre)
+ *  - page: sayfa numarası (default: 1)
+ *  - limit: sayfa başına kayıt sayısı (default: 10, max: 50)
  */
 router.get(
   "/my",
@@ -61,13 +67,49 @@ router.get(
   requireRole("PASSENGER"),
   async (req, res) => {
     try {
-      const requests = await Request.find({ passenger: req.user.userId }).sort(
-        {
-          createdAt: -1,
-        }
-      );
+      const { status, from, to } = req.query;
 
-      return res.json({ requests });
+      const filter = {
+        passenger: req.user.userId,
+      };
+
+      if (status) {
+        filter.status = status;
+      }
+
+      if (from || to) {
+        filter.createdAt = {};
+        if (from) {
+          filter.createdAt.$gte = new Date(from);
+        }
+        if (to) {
+          filter.createdAt.$lte = new Date(to);
+        }
+      }
+
+      // Pagination
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const limitRaw = parseInt(req.query.limit, 10) || 10;
+      const limit = Math.min(Math.max(limitRaw, 1), 50);
+      const skip = (page - 1) * limit;
+
+      const [total, requests] = await Promise.all([
+        Request.countDocuments(filter),
+        Request.find(filter)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit),
+      ]);
+
+      return res.json({
+        requests,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
     } catch (err) {
       console.error("Get my requests error:", err);
       return res

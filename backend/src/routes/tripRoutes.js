@@ -420,6 +420,12 @@ router.get(
 /**
  * GET /api/trips/my
  * DRIVER kendi trip'lerini listeler.
+ *
+ * Opsiyonel query parametreleri:
+ *  - status: ON_GOING / COMPLETED / CANCELLED
+ *  - from, to: tarih aralığı (createdAt)
+ *  - page: sayfa numarası (default: 1)
+ *  - limit: sayfa başına kayıt sayısı (default: 10, max: 50)
  */
 router.get(
   "/my",
@@ -427,12 +433,51 @@ router.get(
   requireRole("DRIVER"),
   async (req, res) => {
     try {
-      const trips = await Trip.find({ driver: req.user.userId })
-        .populate("request")
-        .populate("vehicle")
-        .sort({ createdAt: -1 });
+      const { status, from, to } = req.query;
 
-      return res.json({ trips });
+      const filter = {
+        driver: req.user.userId,
+      };
+
+      if (status) {
+        filter.status = status;
+      }
+
+      if (from || to) {
+        filter.createdAt = {};
+        if (from) {
+          filter.createdAt.$gte = new Date(from);
+        }
+        if (to) {
+          filter.createdAt.$lte = new Date(to);
+        }
+      }
+
+      // Pagination
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const limitRaw = parseInt(req.query.limit, 10) || 10;
+      const limit = Math.min(Math.max(limitRaw, 1), 50);
+      const skip = (page - 1) * limit;
+
+      const [total, trips] = await Promise.all([
+        Trip.countDocuments(filter),
+        Trip.find(filter)
+          .populate("request")
+          .populate("vehicle")
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit),
+      ]);
+
+      return res.json({
+        trips,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
     } catch (err) {
       console.error("Get my trips error:", err);
       return res
@@ -445,6 +490,12 @@ router.get(
 /**
  * GET /api/trips/my-passenger
  * PASSENGER kendi adına açılmış trip'leri listeler.
+ *
+ * Opsiyonel query parametreleri:
+ *  - status: ON_GOING / COMPLETED / CANCELLED
+ *  - from, to: tarih aralığı (createdAt)
+ *  - page: sayfa numarası (default: 1)
+ *  - limit: sayfa başına kayıt sayısı (default: 10, max: 50)
  */
 router.get(
   "/my-passenger",
@@ -452,13 +503,52 @@ router.get(
   requireRole("PASSENGER"),
   async (req, res) => {
     try {
-      const trips = await Trip.find({ passenger: req.user.userId })
-        .populate("request")
-        .populate("driver")
-        .populate("vehicle")
-        .sort({ createdAt: -1 });
+      const { status, from, to } = req.query;
 
-      return res.json({ trips });
+      const filter = {
+        passenger: req.user.userId,
+      };
+
+      if (status) {
+        filter.status = status;
+      }
+
+      if (from || to) {
+        filter.createdAt = {};
+        if (from) {
+          filter.createdAt.$gte = new Date(from);
+        }
+        if (to) {
+          filter.createdAt.$lte = new Date(to);
+        }
+      }
+
+      // Pagination
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const limitRaw = parseInt(req.query.limit, 10) || 10;
+      const limit = Math.min(Math.max(limitRaw, 1), 50);
+      const skip = (page - 1) * limit;
+
+      const [total, trips] = await Promise.all([
+        Trip.countDocuments(filter),
+        Trip.find(filter)
+          .populate("request")
+          .populate("driver")
+          .populate("vehicle")
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit),
+      ]);
+
+      return res.json({
+        trips,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
     } catch (err) {
       console.error("Get my passenger trips error:", err);
       return res.status(500).json({
