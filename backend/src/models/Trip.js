@@ -13,9 +13,10 @@ const tripSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    // Trip.js içinde
     driver: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Driver",   // "User" yerine
       required: true,
     },
 
