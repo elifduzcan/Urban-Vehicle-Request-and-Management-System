@@ -61,7 +61,7 @@ router.get(
       // Şifreyi asla dönmüyoruz
       const safeUsers = users.map((u) => ({
         _id: u._id,
-        name: u.name,
+        name: user.name,
         email: u.email,
         role: u.role,
         isActive: u.isActive !== false, // undefined ise true gibi
@@ -118,7 +118,7 @@ router.patch(
       return res.json({
         user: {
           _id: user._id,
-          name: user.name,
+          name: u.name,
           email: user.email,
           role: user.role,
           isActive: user.isActive !== false,
@@ -376,9 +376,10 @@ router.get(
         if (!t.request || !requestStatusMap.has(String(t.request))) {
           problems.push("missing_request");
         }
-        if (!t.driver || !userIds.has(String(t.driver))) {
-          problems.push("missing_driver_user");
+        if (!t.driver || !driverIds.has(String(t.driver))) {
+          problems.push("missing_driver");
         }
+
         if (!t.passenger || !userIds.has(String(t.passenger))) {
           problems.push("missing_passenger_user");
         }
@@ -452,7 +453,7 @@ router.patch(
   async (req, res) => {
     try {
       const { status } = req.body;
-      const allowedStatuses = ["PENDING", "ACCEPTED", "COMPLETED", "CANCELLED"];
+      const allowedStatuses = ["PENDING", "ACCEPTED", "ON_GOING", "COMPLETED", "CANCELLED"];
 
       if (!status || !allowedStatuses.includes(status)) {
         return res.status(400).json({
@@ -491,7 +492,7 @@ router.patch(
           // Driver istatistiği (daha önce COMPLETED değilse artır)
           if (prevTripStatus !== "COMPLETED") {
             try {
-              const driverProfile = await Driver.findOne({ user: trip.driver });
+              const driverProfile = await Driver.findById(trip.driver);
               if (driverProfile) {
                 driverProfile.totalTrips =
                   (driverProfile.totalTrips || 0) + 1;
@@ -596,7 +597,7 @@ router.patch(
       // Driver istatistik güncelleme (yalnızca ilk kez COMPLETED oluyorsa)
       if (previousStatus !== "COMPLETED" && status === "COMPLETED") {
         try {
-          const driverProfile = await Driver.findOne({ user: trip.driver });
+          const driverProfile = await Driver.findById(trip.driver);
           if (driverProfile) {
             driverProfile.totalTrips = (driverProfile.totalTrips || 0) + 1;
             await driverProfile.save();
