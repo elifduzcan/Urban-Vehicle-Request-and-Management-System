@@ -5,6 +5,9 @@ import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
 import PassengerDashboard from "./pages/PassengerDashboard";
 import DriverDashboard from "./pages/DriverDashboard";
+import AvailableRequests from "./pages/AvailableRequests";
+import MyTrips from "./pages/MyTrips";
+
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -41,6 +44,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
 
+        {/* PASSENGER DASHBOARD */}
         <Route
           path="/passenger"
           element={
@@ -50,6 +54,7 @@ export default function App() {
           }
         />
 
+        {/* DRIVER DASHBOARD -> ANA SAYFA */}
         <Route
           path="/driver"
           element={
@@ -59,8 +64,28 @@ export default function App() {
           }
         />
 
-        {/* Coordinator / Admin için de benzer ProtectedRoute ile route ekleyeceğiz */}
+        {/* DRIVER -> AVAILABLE REQUESTS */}
+        <Route
+          path="/driver/requests"
+          element={
+            <ProtectedRoute allowedRoles={["DRIVER"]}>
+              <AvailableRequests />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* DRIVER -> MY TRIPS */}
+        <Route
+          path="/driver/my-trips"
+          element={
+            <ProtectedRoute allowedRoles={["DRIVER"]}>
+              <MyTrips />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
+
+
     </div>
   );
 }
