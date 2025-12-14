@@ -6,6 +6,9 @@ import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
 import PassengerDashboard from "./pages/PassengerDashboard";
 import DriverDashboard from "./pages/DriverDashboard";
+import AvailableRequests from "./pages/AvailableRequests";
+import MyTrips from "./pages/MyTrips";
+
 
 import AdminUserManagement from "./pages/AdminUserManagement";
 import AdminPendingDrivers from "./pages/AdminPendingDrivers";
@@ -156,7 +159,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
 
-        {/* Passenger */}
+        {/* PASSENGER DASHBOARD */}
         <Route
           path="/passenger"
           element={
@@ -166,17 +169,7 @@ export default function App() {
           }
         />
 
-        {/* Passenger Trip History */}
-        <Route
-          path="/passenger/trips"
-          element={
-            <ProtectedRoute allowedRoles={["PASSENGER"]}>
-              <PassengerTrips />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Driver */}
+        {/* DRIVER DASHBOARD -> ANA SAYFA */}
         <Route
           path="/driver"
           element={
@@ -186,59 +179,28 @@ export default function App() {
           }
         />
 
-        {/* ADMIN PANELİ – sadece ADMIN user listesine girebilir */}
+        {/* DRIVER -> AVAILABLE REQUESTS */}
         <Route
-          path="/admin/users"
+          path="/driver/requests"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN"]}>
-              <AdminUserManagement />
+            <ProtectedRoute allowedRoles={["DRIVER"]}>
+              <AvailableRequests />
             </ProtectedRoute>
           }
         />
 
-        {/* Pending Drivers – ADMIN + COORDINATOR */}
+        {/* DRIVER -> MY TRIPS */}
         <Route
-          path="/admin/pending-drivers"
+          path="/driver/my-trips"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
-              <AdminPendingDrivers />
+            <ProtectedRoute allowedRoles={["DRIVER"]}>
+              <MyTrips />
             </ProtectedRoute>
           }
         />
-
-        {/* Pending Vehicles – ADMIN + COORDINATOR */}
-        <Route
-          path="/admin/pending-vehicles"
-          element={
-            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
-              <AdminPendingVehicles />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Global Requests – ADMIN + COORDINATOR */}
-        <Route
-          path="/admin/requests"
-          element={
-            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
-              <AdminGlobalRequests />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Global Trips – ADMIN + COORDINATOR */}
-        <Route
-          path="/admin/trips"
-          element={
-            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
-              <AdminGlobalTrips />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Bilinmeyen route → 404 */}
-        <Route path="*" element={<p>Page not found.</p>} />
       </Routes>
+
+
     </div>
   );
 }

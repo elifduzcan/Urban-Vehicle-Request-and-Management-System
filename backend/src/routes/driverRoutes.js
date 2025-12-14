@@ -244,12 +244,12 @@ router.get(
 
       // 3) Trip istatistikleri
       const [ongoingTrip, completedCount, cancelledCount] = await Promise.all([
-        Trip.findOne({ driver: req.user.userId, status: "ON_GOING" })
+        Trip.findOne({ driver: driver._id, status: "ON_GOING" })
           .populate("request")
           .populate("passenger")
           .populate("vehicle"),
-        Trip.countDocuments({ driver: req.user.userId, status: "COMPLETED" }),
-        Trip.countDocuments({ driver: req.user.userId, status: "CANCELLED" }),
+        Trip.countDocuments({ driver: driver._id, status: "COMPLETED" }),
+        Trip.countDocuments({ driver: driver._id, status: "CANCELLED" }),
       ]);
 
       return res.json({

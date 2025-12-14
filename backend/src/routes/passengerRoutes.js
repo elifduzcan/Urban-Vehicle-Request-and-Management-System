@@ -74,12 +74,11 @@ router.get(
 
       // 3) Yolcunun tüm trip'leri
       const trips = await Trip.find({ passenger: req.user.userId })
-        .sort({ createdAt: -1 })
-        .populate("driver")   // driver → User referansı
+        .populate({ path: "driver", populate: { path: "user" } })
         .populate("vehicle")
         .populate("request")
-        .lean();
-
+        .sort({ createdAt: -1 }); 
+        
       const tripCounts = {
         total: trips.length,
         ongoing: trips.filter((t) => t.status === "ON_GOING").length,
