@@ -188,4 +188,51 @@ router.patch(
   }
 );
 
+/**
+ * PATCH /api/vehicles/:id/status
+ * COORDINATOR veya ADMIN → aracın isActive durumunu günceller.
+ *
+ * Body:
+ *  { "isActive": true }  veya  { "isActive": false }
+ */
+router.patch(
+  "/:id/status",
+  authMiddleware,
+  requireRole("COORDINATOR", "ADMIN"),
+  async (req, res) => {
+    try {
+      const { isActive } = req.body;
+
+      if (typeof isActive === "undefined") {
+        return res
+          .status(400)
+          .json({ message: "isActive field is required (true/false)" });
+      }
+
+      const vehicle = await Vehicle.findByIdAndUpdate(
+        req.params.id,
+        { isActive: Boolean(isActive) },
+        { new: true }
+      ).populate({
+        path: "ownerDriver",
+        populate: { path: "user" },
+      });
+
+      if (!vehicle) {
+        return res.status(404).json({ message: "Vehicle not found" });
+      }
+
+      return res.json({
+        message: "Vehicle status updated successfully",
+        vehicle,
+      });
+    } catch (err) {
+      console.error("Error in PATCH /api/vehicles/:id/status:", err);
+      return res.status(500).json({
+        message: "Server error while updating vehicle status",
+      });
+    }
+  }
+);
+
 module.exports = router;

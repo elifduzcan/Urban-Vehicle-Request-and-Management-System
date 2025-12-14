@@ -15,7 +15,32 @@ export default function LoginPage() {
   const [error, setError] = useState("");
 
   const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  // Rol'e göre yönlendirme yapan yardımcı fonksiyon
+  const redirectByRole = (role) => {
+    switch (role) {
+      case "DRIVER":
+        navigate("/driver");
+        break;
+      case "ADMIN":
+        // Admin kullanıcı yönetimi ekranı
+        navigate("/admin/users");
+        break;
+      case "COORDINATOR":
+        // Koordinatör global request ekranı
+        navigate("/admin/requests");
+        break;
+      case "PASSENGER":
+      default:
+        navigate("/passenger");
+        break;
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -23,60 +48,69 @@ export default function LoginPage() {
     setError("");
 
     try {
+      // Backend: POST /api/auth/login
       const res = await api.post("/auth/login", form);
-      const { user, token } = res.data;
 
+      // Beklenen cevap: { token, user: { ... } }
+      const { token, user } = res.data || {};
+
+      if (!token || !user) {
+        setError("Unexpected response from server.");
+        return;
+      }
+
+      // AuthContext'e kullanıcı ve token'ı yaz
       login(user, token);
 
-      // Role'e göre yönlendirme (şimdilik basit)
-      if (user.role === "DRIVER") {
-        navigate("/driver");
-      } else if (user.role === "COORDINATOR") {
-        navigate("/coordinator");
-      } else if (user.role === "ADMIN") {
-        navigate("/admin");
-      } else {
-        navigate("/passenger");
-      }
+      // Rol'e göre sayfaya yönlendir
+      redirectByRole(user.role);
     } catch (err) {
-      console.error(err);
-      setError(
-        err.response?.data?.message || "Login failed. Please check your info."
-      );
+      console.error("Login error:", err);
+      const message =
+        err?.response?.data?.message ||
+        "Login failed. Please check your credentials.";
+      setError(message);
     }
   };
 
   return (
     <div style={{ maxWidth: 400, margin: "40px auto" }}>
-      <h2>Login</h2>
+      <h1>Login</h1>
       <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: 12 }}>
-          <label>Email</label>
-          <input
-            type="email"
-            name="email"
-            value={form.email}
-            onChange={handleChange}
-            required
-            style={{ width: "100%", padding: 8 }}
-          />
+        <div style={{ marginBottom: 8 }}>
+          <label>
+            Email:
+            <input
+              type="email"
+              name="email"
+              value={form.email}
+              onChange={handleChange}
+              required
+              style={{ width: "100%", padding: "4px 8px", marginTop: 4 }}
+            />
+          </label>
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <label>Password</label>
-          <input
-            type="password"
-            name="password"
-            value={form.password}
-            onChange={handleChange}
-            required
-            style={{ width: "100%", padding: 8 }}
-          />
+
+        <div style={{ marginBottom: 8 }}>
+          <label>
+            Password:
+            <input
+              type="password"
+              name="password"
+              value={form.password}
+              onChange={handleChange}
+              required
+              style={{ width: "100%", padding: "4px 8px", marginTop: 4 }}
+            />
+          </label>
         </div>
+
         {error && (
           <p style={{ color: "red", marginBottom: 8 }}>
             {error}
           </p>
         )}
+
         <button type="submit" style={{ padding: "8px 16px" }}>
           Login
         </button>

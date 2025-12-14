@@ -59,6 +59,7 @@ async function getApprovedDriverAndVerifiedVehicle(userId) {
  * - Driver için onaylı (isApproved) ve aktif (isActive) bir Driver kaydı olmalı.
  * - Bu driver'a ait en az bir doğrulanmış (isVerified) + aktif (isActive) araç olmalı.
  * - Request PENDING değilse kabul edilemez.
+ * - Aynı request için birden fazla trip oluşturulamaz.
  */
 router.post("/", authMiddleware, requireRole("DRIVER"), async (req, res) => {
   try {
@@ -102,6 +103,18 @@ router.post("/", authMiddleware, requireRole("DRIVER"), async (req, res) => {
       return res
         .status(400)
         .json({ message: "Request is not available (not PENDING)" });
+    }
+
+    // 3.5) Aynı request için daha önce trip oluşturulmuş mu?
+    const existingTripForRequest = await Trip.findOne({
+      request: request._id,
+    });
+
+    if (existingTripForRequest) {
+      return res.status(400).json({
+        message:
+          "This request is already assigned to another driver (trip already exists).",
+      });
     }
 
     // 4) Request'i ACCEPTED yap
@@ -155,13 +168,31 @@ router.patch(
         return res.status(400).json({ message: "Trip is not ongoing" });
       }
 
+      // 1) Trip'i tamamla
       trip.status = "COMPLETED";
       trip.completedAt = new Date();
       await trip.save();
 
+      // 2) Bağlı request'i tamamla
       if (trip.request) {
         trip.request.status = "COMPLETED";
         await trip.request.save();
+      }
+
+      // 3) Driver istatistiğini güncelle (totalTrips + 1)
+      try {
+        const driverProfile = await Driver.findOne({ user: req.user.userId });
+        if (driverProfile) {
+          driverProfile.totalTrips = (driverProfile.totalTrips || 0) + 1;
+          await driverProfile.save();
+        }
+      } catch (statsErr) {
+        console.error(
+          "Error while updating driver statistics on trip complete:",
+          statsErr
+        );
+        // İstatistik güncellenemese bile trip tamamlanmış sayılıyor,
+        // o yüzden burada ekstra hata döndürmüyoruz.
       }
 
       return res.json({ trip });
@@ -195,18 +226,21 @@ router.patch(
         return res.status(404).json({ message: "Trip not found" });
       }
 
+      // Trip gerçekten bu user'a mı ait? (Trip.driver User ref'i)
       if (trip.driver.toString() !== req.user.userId) {
         return res
           .status(403)
           .json({ message: "You are not the driver of this trip" });
       }
 
+      // COMPLETED trip iptal edilemez
       if (trip.status === "COMPLETED") {
         return res
           .status(400)
           .json({ message: "Completed trips cannot be cancelled" });
       }
 
+      // Zaten CANCELLED ise tekrar iptal etme
       if (trip.status === "CANCELLED") {
         return res
           .status(400)
@@ -214,7 +248,7 @@ router.patch(
       }
 
       trip.status = "CANCELLED";
-      trip.completedAt = new Date(); // log amaçlı
+      trip.completedAt = new Date();
       await trip.save();
 
       if (trip.request) {
@@ -241,9 +275,11 @@ router.patch(
  *  - driverId: belirli bir driver (User id)
  *  - passengerId: belirli bir passenger
  *  - from, to: tarih aralığı (createdAt'e göre, ISO date string)
+ *  - page: sayfa numarası (default: 1)
+ *  - limit: sayfa başına kayıt sayısı (default: 20, max: 100)
  *
  * Örnek:
- *  GET /api/trips?status=ON_GOING
+ *  GET /api/trips?status=ON_GOING&page=1&limit=20
  *  GET /api/trips?driverId=6565...&from=2025-12-01&to=2025-12-31
  */
 router.get(
@@ -278,14 +314,33 @@ router.get(
         }
       }
 
-      const trips = await Trip.find(filter)
-        .populate("request")
-        .populate("driver")
-        .populate("passenger")
-        .populate("vehicle")
-        .sort({ createdAt: -1 });
+      // Pagination parametreleri
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const limitRaw = parseInt(req.query.limit, 10) || 20;
+      const limit = Math.min(Math.max(limitRaw, 1), 100);
+      const skip = (page - 1) * limit;
 
-      return res.json({ trips });
+      const [total, trips] = await Promise.all([
+        Trip.countDocuments(filter),
+        Trip.find(filter)
+          .populate("request")
+          .populate("driver")
+          .populate("passenger")
+          .populate("vehicle")
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit),
+      ]);
+
+      return res.json({
+        trips,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
     } catch (err) {
       console.error("Admin/Coordinator list trips error:", err);
       return res
@@ -296,8 +351,81 @@ router.get(
 );
 
 /**
+ * GET /api/trips/:id
+ * Tek bir trip'in detayını döner.
+ *
+ * Erişim kuralları:
+ *  - ADMIN/COORDINATOR → tüm trip'leri görebilir.
+ *  - DRIVER           → sadece kendi trip'lerini görebilir.
+ *  - PASSENGER        → sadece kendi adına oluşturulmuş trip'leri görebilir.
+ */
+router.get(
+  "/:id",
+  authMiddleware,
+  requireRole("PASSENGER", "DRIVER", "COORDINATOR", "ADMIN"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const trip = await Trip.findById(id)
+        .populate("request")
+        .populate("driver")
+        .populate("passenger")
+        .populate("vehicle");
+
+      if (!trip) {
+        return res.status(404).json({ message: "Trip not found" });
+      }
+
+      const role = req.user.role;
+      const userId = req.user.userId;
+
+      let allowed = false;
+
+      // Admin / Coordinator → full access
+      if (role === "ADMIN" || role === "COORDINATOR") {
+        allowed = true;
+      } else if (role === "DRIVER") {
+        const driverField =
+          trip.driver && trip.driver._id ? trip.driver._id : trip.driver;
+        if (driverField && driverField.toString() === userId) {
+          allowed = true;
+        }
+      } else if (role === "PASSENGER") {
+        const passengerField =
+          trip.passenger && trip.passenger._id
+            ? trip.passenger._id
+            : trip.passenger;
+        if (passengerField && passengerField.toString() === userId) {
+          allowed = true;
+        }
+      }
+
+      if (!allowed) {
+        return res
+          .status(403)
+          .json({ message: "You are not allowed to view this trip" });
+      }
+
+      return res.json({ trip });
+    } catch (err) {
+      console.error("Get trip detail error:", err);
+      return res
+        .status(500)
+        .json({ message: "Server error while fetching trip detail" });
+    }
+  }
+);
+
+/**
  * GET /api/trips/my
  * DRIVER kendi trip'lerini listeler.
+ *
+ * Opsiyonel query parametreleri:
+ *  - status: ON_GOING / COMPLETED / CANCELLED
+ *  - from, to: tarih aralığı (createdAt)
+ *  - page: sayfa numarası (default: 1)
+ *  - limit: sayfa başına kayıt sayısı (default: 10, max: 50)
  */
 router.get(
   "/my",
@@ -305,12 +433,51 @@ router.get(
   requireRole("DRIVER"),
   async (req, res) => {
     try {
-      const trips = await Trip.find({ driver: req.user.userId })
-        .populate("request")
-        .populate("vehicle")
-        .sort({ createdAt: -1 });
+      const { status, from, to } = req.query;
 
-      return res.json({ trips });
+      const filter = {
+        driver: req.user.userId,
+      };
+
+      if (status) {
+        filter.status = status;
+      }
+
+      if (from || to) {
+        filter.createdAt = {};
+        if (from) {
+          filter.createdAt.$gte = new Date(from);
+        }
+        if (to) {
+          filter.createdAt.$lte = new Date(to);
+        }
+      }
+
+      // Pagination
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const limitRaw = parseInt(req.query.limit, 10) || 10;
+      const limit = Math.min(Math.max(limitRaw, 1), 50);
+      const skip = (page - 1) * limit;
+
+      const [total, trips] = await Promise.all([
+        Trip.countDocuments(filter),
+        Trip.find(filter)
+          .populate("request")
+          .populate("vehicle")
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit),
+      ]);
+
+      return res.json({
+        trips,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
     } catch (err) {
       console.error("Get my trips error:", err);
       return res
@@ -323,6 +490,12 @@ router.get(
 /**
  * GET /api/trips/my-passenger
  * PASSENGER kendi adına açılmış trip'leri listeler.
+ *
+ * Opsiyonel query parametreleri:
+ *  - status: ON_GOING / COMPLETED / CANCELLED
+ *  - from, to: tarih aralığı (createdAt)
+ *  - page: sayfa numarası (default: 1)
+ *  - limit: sayfa başına kayıt sayısı (default: 10, max: 50)
  */
 router.get(
   "/my-passenger",
@@ -330,18 +503,162 @@ router.get(
   requireRole("PASSENGER"),
   async (req, res) => {
     try {
-      const trips = await Trip.find({ passenger: req.user.userId })
-        .populate("request")
-        .populate("driver")
-        .populate("vehicle")
-        .sort({ createdAt: -1 });
+      const { status, from, to } = req.query;
 
-      return res.json({ trips });
+      const filter = {
+        passenger: req.user.userId,
+      };
+
+      if (status) {
+        filter.status = status;
+      }
+
+      if (from || to) {
+        filter.createdAt = {};
+        if (from) {
+          filter.createdAt.$gte = new Date(from);
+        }
+        if (to) {
+          filter.createdAt.$lte = new Date(to);
+        }
+      }
+
+      // Pagination
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const limitRaw = parseInt(req.query.limit, 10) || 10;
+      const limit = Math.min(Math.max(limitRaw, 1), 50);
+      const skip = (page - 1) * limit;
+
+      const [total, trips] = await Promise.all([
+        Trip.countDocuments(filter),
+        Trip.find(filter)
+          .populate("request")
+          .populate("driver")
+          .populate("vehicle")
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit),
+      ]);
+
+      return res.json({
+        trips,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
     } catch (err) {
       console.error("Get my passenger trips error:", err);
       return res.status(500).json({
         message: "Server error while fetching passenger trips",
       });
+    }
+  }
+);
+
+/**
+ * POST /api/trips/:id/rate
+ * PASSENGER → tamamlanmış bir trip için sürücüyü puanlar.
+ *
+ * Kurallar:
+ * - Trip mevcut olmalı.
+ * - Trip bu yolcuya ait olmalı (passenger == current user).
+ * - Trip status'ü COMPLETED olmalı.
+ * - Aynı trip sadece 1 kez puanlanabilir.
+ * - Puan 1 ile 5 arasında olmalı.
+ */
+router.post(
+  "/:id/rate",
+  authMiddleware,
+  requireRole("PASSENGER"),
+  async (req, res) => {
+    try {
+      const { rating } = req.body;
+
+      // 1) rating valid mi?
+      if (typeof rating !== "number" || Number.isNaN(rating)) {
+        return res
+          .status(400)
+          .json({ message: "rating must be a number between 1 and 5" });
+      }
+
+      if (rating < 1 || rating > 5) {
+        return res
+          .status(400)
+          .json({ message: "rating must be between 1 and 5" });
+      }
+
+      // 2) Trip'i bul
+      const trip = await Trip.findById(req.params.id);
+      if (!trip) {
+        return res.status(404).json({ message: "Trip not found" });
+      }
+
+      // 3) Bu trip gerçekten bu yolcuya mı ait?
+      if (trip.passenger.toString() !== req.user.userId) {
+        return res
+          .status(403)
+          .json({ message: "You are not the passenger of this trip" });
+      }
+
+      // 4) Sadece COMPLETED trip'ler puanlanabilir
+      if (trip.status !== "COMPLETED") {
+        return res.status(400).json({
+          message: "Only completed trips can be rated",
+        });
+      }
+
+      // 5) Aynı trip ikinci kez puanlanamaz
+      if (trip.isRated) {
+        return res
+          .status(400)
+          .json({ message: "This trip has already been rated" });
+      }
+
+      // 6) Driver profilini bul
+      const driverProfile = await Driver.findOne({ user: trip.driver });
+      if (!driverProfile) {
+        return res
+          .status(404)
+          .json({ message: "Driver profile not found" });
+      }
+
+      // 7) Ortalama rating'i güncelle (basit running average)
+      const currentAvg = driverProfile.rating || 0;
+      const currentCount = driverProfile.ratingCount || 0;
+      const newCount = currentCount + 1;
+
+      const newAvg =
+        currentCount === 0
+          ? rating
+          : (currentAvg * currentCount + rating) / newCount;
+
+      driverProfile.rating = newAvg;
+      driverProfile.ratingCount = newCount;
+      await driverProfile.save();
+
+      // 8) Trip'i işaretle
+      trip.isRated = true;
+      trip.passengerRating = rating;
+      await trip.save();
+
+      return res.json({
+        message: "Rating submitted successfully",
+        driver: {
+          id: driverProfile._id,
+          rating: driverProfile.rating,
+          ratingCount: driverProfile.ratingCount,
+          totalTrips: driverProfile.totalTrips,
+        },
+        trip,
+      });
+    } catch (err) {
+      console.error("Rate trip error:", err);
+      return res
+        .status(500)
+        .json({ message: "Server error while rating trip" });
     }
   }
 );

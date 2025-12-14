@@ -23,7 +23,7 @@ function generateToken(user) {
 // POST /api/auth/register
 router.post("/register", async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, adminSecret } = req.body;
 
     if (!name || !email || !password) {
       return res
@@ -40,10 +40,24 @@ router.post("/register", async (req, res) => {
     // Şifreyi hashle
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Role'i kontrol edelim (şimdilik sadece PASSENGER / DRIVER seçimine izin verelim)
-    let userRole = role || "PASSENGER";
-    const allowedRoles = ["PASSENGER", "DRIVER"];
-    if (!allowedRoles.includes(userRole)) {
+    // Rol kontrolü:
+    // - Temel roller: PASSENGER / DRIVER → herkes kaydolabilir
+    // - Yükseltilmiş roller: COORDINATOR / ADMIN → sadece adminSecret ile
+    const BASIC_ROLES = ["PASSENGER", "DRIVER"];
+    const ELEVATED_ROLES = ["COORDINATOR", "ADMIN"];
+
+    let userRole = (role || "PASSENGER").toUpperCase();
+
+    if (ELEVATED_ROLES.includes(userRole)) {
+      // COORDINATOR / ADMIN için gizli anahtar zorunlu
+      if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
+        return res.status(403).json({
+          message:
+            "You are not allowed to register with this role. Invalid adminSecret.",
+        });
+      }
+    } else if (!BASIC_ROLES.includes(userRole)) {
+      // Geçersiz bir rol geldiyse default PASSENGER
       userRole = "PASSENGER";
     }
 
@@ -52,23 +66,24 @@ router.post("/register", async (req, res) => {
       email: email.toLowerCase(),
       password: hashedPassword,
       role: userRole,
-      // isActive alanı modelde default: true ise burada ayrı set etmeye gerek yok
+      // isActive modelde default: true ise ayrıca set etmeye gerek yok
     });
 
     const token = generateToken(user);
 
-    res.status(201).json({
+    return res.status(201).json({
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
+        isActive: user.isActive,
       },
       token,
     });
   } catch (err) {
     console.error("Register error:", err);
-    res.status(500).json({ message: "Server error during registration" });
+    return res.status(500).json({ message: "Server error during registration" });
   }
 });
 
@@ -85,9 +100,7 @@ router.post("/login", async (req, res) => {
 
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
-      return res
-        .status(400)
-        .json({ message: "Invalid email or password" });
+      return res.status(400).json({ message: "Invalid email or password" });
     }
 
     // Hesap pasif ise login'e izin verme
@@ -99,25 +112,24 @@ router.post("/login", async (req, res) => {
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res
-        .status(400)
-        .json({ message: "Invalid email or password" });
+      return res.status(400).json({ message: "Invalid email or password" });
     }
 
     const token = generateToken(user);
 
-    res.json({
+    return res.json({
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
+        isActive: user.isActive,
       },
       token,
     });
   } catch (err) {
     console.error("Login error:", err);
-    res.status(500).json({ message: "Server error during login" });
+    return res.status(500).json({ message: "Server error during login" });
   }
 });
 
@@ -128,10 +140,10 @@ router.get("/me", authMiddleware, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-    res.json({ user });
+    return res.json({ user });
   } catch (err) {
     console.error("Me error:", err);
-    res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Server error" });
   }
 });
 

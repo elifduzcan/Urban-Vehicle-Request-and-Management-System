@@ -6,6 +6,8 @@ const authMiddleware = require("../middleware/authMiddleware");
 const requireRole = require("../middleware/roleMiddleware");
 const Driver = require("../models/Driver");
 const User = require("../models/user");
+const Vehicle = require("../models/Vehicle");
+const Trip = require("../models/Trip");
 
 // Helper: get or create driver profile for the logged-in user
 async function findOrCreateDriverForUser(userId, licenseNumber, licenseClass) {
@@ -159,6 +161,131 @@ router.patch(
     } catch (err) {
       console.error("Error in PATCH /api/drivers/:id/approve:", err);
       return res.status(500).json({ message: "Server error" });
+    }
+  }
+);
+
+/**
+ * PATCH /api/drivers/:id/status
+ * COORDINATOR veya ADMIN → sürücünün isActive durumunu günceller.
+ *
+ * Body:
+ *  { "isActive": true }  veya  { "isActive": false }
+ */
+router.patch(
+  "/:id/status",
+  authMiddleware,
+  requireRole("COORDINATOR", "ADMIN"),
+  async (req, res) => {
+    try {
+      const { isActive } = req.body;
+
+      // Body kontrolü
+      if (typeof isActive === "undefined") {
+        return res
+          .status(400)
+          .json({ message: "isActive field is required (true/false)" });
+      }
+
+      const driver = await Driver.findByIdAndUpdate(
+        req.params.id,
+        { isActive: Boolean(isActive) },
+        { new: true }
+      ).populate("user");
+
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+
+      return res.json({
+        message: "Driver status updated successfully",
+        driver,
+      });
+    } catch (err) {
+      console.error("Error in PATCH /api/drivers/:id/status:", err);
+      return res.status(500).json({
+        message: "Server error while updating driver status",
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/drivers/dashboard
+ * DRIVER → kendi dashboard özetini görür.
+ *
+ * Dönen bilgiler:
+ *  - driver: profil, approval, aktiflik, rating, ratingCount, totalTrips
+ *  - vehicles: toplam araç sayısı, verified/active sayıları, araç listesi
+ *  - trips:
+ *      - ongoing: varsa şu anki ON_GOING trip (request/passenger/vehicle ile)
+ *      - counts: completed, cancelled
+ */
+router.get(
+  "/dashboard",
+  authMiddleware,
+  requireRole("DRIVER"),
+  async (req, res) => {
+    try {
+      // 1) Driver profilini bul
+      const driver = await Driver.findOne({ user: req.user.userId }).populate(
+        "user"
+      );
+
+      if (!driver) {
+        return res.status(404).json({ message: "Driver profile not found" });
+      }
+
+      // 2) Araçları bul
+      const vehicles = await Vehicle.find({ ownerDriver: driver._id });
+      const totalVehicles = vehicles.length;
+      const verifiedVehicles = vehicles.filter((v) => v.isVerified).length;
+      const activeVehicles = vehicles.filter((v) => v.isActive !== false).length;
+
+      // 3) Trip istatistikleri
+      const [ongoingTrip, completedCount, cancelledCount] = await Promise.all([
+        Trip.findOne({ driver: req.user.userId, status: "ON_GOING" })
+          .populate("request")
+          .populate("passenger")
+          .populate("vehicle"),
+        Trip.countDocuments({ driver: req.user.userId, status: "COMPLETED" }),
+        Trip.countDocuments({ driver: req.user.userId, status: "CANCELLED" }),
+      ]);
+
+      return res.json({
+        driver: {
+          id: driver._id,
+          user: {
+            id: driver.user._id,
+            name: driver.user.name,
+            email: driver.user.email,
+          },
+          isApproved: driver.isApproved,
+          isActive: driver.isActive !== false,
+          rating: driver.rating || 0,
+          ratingCount: driver.ratingCount || 0,
+          totalTrips: driver.totalTrips || 0,
+          createdAt: driver.createdAt,
+        },
+        vehicles: {
+          total: totalVehicles,
+          verified: verifiedVehicles,
+          active: activeVehicles,
+          items: vehicles,
+        },
+        trips: {
+          ongoing: ongoingTrip || null,
+          counts: {
+            completed: completedCount,
+            cancelled: cancelledCount,
+          },
+        },
+      });
+    } catch (err) {
+      console.error("Driver dashboard error:", err);
+      return res
+        .status(500)
+        .json({ message: "Server error while fetching driver dashboard" });
     }
   }
 );

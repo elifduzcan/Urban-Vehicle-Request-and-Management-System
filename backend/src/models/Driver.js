@@ -35,16 +35,23 @@ const driverSchema = new mongoose.Schema(
       default: true,
     },
 
-    // Optional statistics (can be improved later)
+     // Optional statistics (can be improved later)
     rating: {
       type: Number,
       default: 0,
       min: 0,
       max: 5,
     },
+    // Kaç defa puanlandığını takip ediyoruz
+    ratingCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     totalTrips: {
       type: Number,
       default: 0,
+      min: 0,
     },
   },
   {
