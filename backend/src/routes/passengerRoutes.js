@@ -62,15 +62,15 @@ router.get(
         total: requests.length,
         pending: requests.filter((r) => r.status === "PENDING").length,
         accepted: requests.filter((r) => r.status === "ACCEPTED").length,
+        ongoing: requests.filter((r) => r.status === "ON_GOING").length,
         completed: requests.filter((r) => r.status === "COMPLETED").length,
         cancelled: requests.filter((r) => r.status === "CANCELLED").length,
       };
 
       // Aktif request: PENDING veya ACCEPTED olan ilk kayıt
-      const activeRequest =
-        requests.find((r) =>
-          ["PENDING", "ACCEPTED"].includes(r.status)
-        ) || null;
+      const activeRequest = requests.find((r) =>
+        ["PENDING", "ACCEPTED", "ON_GOING"].includes(r.status)
+      ) || null;
 
       // 3) Yolcunun tüm trip'leri
       const trips = await Trip.find({ passenger: req.user.userId })
@@ -78,7 +78,7 @@ router.get(
         .populate("vehicle")
         .populate("request")
         .sort({ createdAt: -1 }); 
-        
+
       const tripCounts = {
         total: trips.length,
         ongoing: trips.filter((t) => t.status === "ON_GOING").length,

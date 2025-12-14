@@ -60,9 +60,14 @@ const vehicleSchema = new mongoose.Schema(
     // Aracın operasyonel müsaitlik durumu
     availabilityStatus: {
       type: String,
-      enum: ["AVAILABLE", "ON_TRIP"],
+      enum: ["AVAILABLE", "ON_TRIP", "INACTIVE"],
       default: "AVAILABLE",
     },
+
+    insuranceExpiry: {
+      type: Date,
+    },
+
   },
   {
     timestamps: true,

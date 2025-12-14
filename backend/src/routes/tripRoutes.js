@@ -172,7 +172,7 @@ router.post(
           });
         }
       }
-      
+
       // Duplicate key (unique index) yakala → yarış koşulunda “temiz” hata dön
       if (err && err.code === 11000) {
         // Hangi unique patladı?
@@ -200,6 +200,49 @@ router.post(
       return res.status(500).json({ message: "Server error while creating trip" });
     } finally {
       if (session) session.endSession();
+    }
+  }
+);
+
+router.patch(
+  "/:id/start",
+  authMiddleware,
+  requireRole("DRIVER"),
+  async (req, res) => {
+    try {
+      const trip = await Trip.findById(req.params.id).populate("request");
+
+      if (!trip) return res.status(404).json({ message: "Trip not found" });
+
+      // driver check (Trip.driver artık Driver ref olduğu için)
+      const driver = await Driver.findOne({ user: req.user.userId });
+      if (!driver) return res.status(404).json({ message: "Driver not found" });
+
+      if (trip.driver.toString() !== driver._id.toString()) {
+        return res.status(403).json({ message: "You are not allowed to start this trip" });
+      }
+
+      if (!trip.request) return res.status(400).json({ message: "Trip has no request" });
+
+      // Request yalnızca ACCEPTED ise ON_GOING’e geçsin
+      if (trip.request.status !== "ACCEPTED") {
+        return res.status(400).json({
+          message: "Trip can only be started when request is ACCEPTED",
+          currentRequestStatus: trip.request.status,
+        });
+      }
+
+      trip.request.status = "ON_GOING";
+      await trip.request.save();
+
+      // Trip zaten ON_GOING; istersen startedAt refresh:
+      if (!trip.startedAt) trip.startedAt = new Date();
+      await trip.save();
+
+      return res.json({ message: "Trip started", trip });
+    } catch (err) {
+      console.error("Start trip error:", err);
+      return res.status(500).json({ message: "Server error while starting trip" });
     }
   }
 );

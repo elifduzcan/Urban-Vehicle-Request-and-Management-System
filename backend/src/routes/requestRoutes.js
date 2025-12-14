@@ -25,7 +25,7 @@ router.post("/", authMiddleware, requireRole("PASSENGER"), async (req, res) => {
     // Aktif saydıklarımız: PENDING ve ACCEPTED
     const existingActiveRequest = await Request.findOne({
       passenger: req.user.userId,
-      status: { $in: ["PENDING", "ACCEPTED"] },
+      status: { $in: ["PENDING", "ACCEPTED", "ON_GOING"] },
     });
 
     if (existingActiveRequest) {
