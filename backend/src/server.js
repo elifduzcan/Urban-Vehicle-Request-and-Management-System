@@ -1,16 +1,34 @@
+// src/server.js
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 
 const connectDB = require("./config/db");
 
+// ---- ENV VALIDATION ----
+function validateEnv() {
+  const requiredVars = ["MONGODB_URI", "JWT_SECRET"];
+  const missing = requiredVars.filter((name) => !process.env[name]);
+
+  if (missing.length > 0) {
+    console.error("❌ Missing required environment variables:");
+    missing.forEach((v) => console.error(`   - ${v}`));
+    console.error(
+      "Please define them in your .env file before starting the backend."
+    );
+    process.exit(1);
+  }
+}
+
+// Önce env’leri kontrol et, sonra DB’ye bağlan
+validateEnv();
+connectDB();
+
 const app = express();
+
 const driverRoutes = require("./routes/driverRoutes");
 const vehicleRoutes = require("./routes/vehicleRoutes");
 const adminRoutes = require("./routes/adminRoutes");
-
-// DB'ye bağlan
-connectDB();
 
 app.use(cors());
 app.use(express.json());
@@ -32,6 +50,28 @@ app.use("/api/coordinator", coordinatorRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", message: "Backend is running" });
+});
+
+// ---- 404 JSON handler ----
+app.use((req, res, next) => {
+  res.status(404).json({
+    message: "Endpoint not found",
+    path: req.originalUrl,
+    method: req.method,
+  });
+});
+
+// ---- Global error handler ----
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err);
+
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  res.status(500).json({
+    message: "Internal server error",
+  });
 });
 
 const PORT = process.env.PORT || 5000;
