@@ -158,6 +158,10 @@ export default function AdminGlobalRequests() {
               <th style={{ borderBottom: "1px solid #ddd", textAlign: "left" }}>
                 Created At
               </th>
+              <th style={{ borderBottom: "1px solid #ddd", textAlign: "left" }}>
+                Detail
+              </th>
+
             </tr>
           </thead>
           <tbody>
@@ -206,6 +210,14 @@ export default function AdminGlobalRequests() {
                   }}
                 >
                   {formatDate(r.createdAt)}
+                </td>
+                <td
+                  style={{
+                    borderBottom: "1px solid #f0f0f0",
+                    padding: "4px 0",
+                  }}
+                >
+                  <Link to={`/requests/${r._id}`}>View</Link>
                 </td>
               </tr>
             ))}

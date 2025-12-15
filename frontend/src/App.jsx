@@ -17,8 +17,8 @@ import AdminGlobalRequests from "./pages/AdminGlobalRequests";
 import AdminGlobalTrips from "./pages/AdminGlobalTrips";
 import CoordinatorDashboard from "./pages/CoordinatorDashboard";
 import CoordinatorRequests from "./pages/CoordinatorRequests";
-
-
+import TripDetail from "./pages/TripDetail";
+import RequestDetail from "./pages/RequestDetail";
 import HomePage from "./pages/Home";
 import PassengerTrips from "./pages/PassengerTrips"; // ✅ yeni trip history sayfası
 
@@ -289,6 +289,24 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/trips/:id"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR", "DRIVER", "PASSENGER"]}>
+              <TripDetail />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/requests/:id"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR", "DRIVER", "PASSENGER"]}>
+              <RequestDetail />
+            </ProtectedRoute>
+          }
+        />
+
 
       </Routes>
       
