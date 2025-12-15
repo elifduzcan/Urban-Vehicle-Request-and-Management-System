@@ -68,5 +68,11 @@ router.post(
   requireRole("PASSENGER"),
   rateTrip
 );
+router.patch(
+  "/:id/rate",
+  authMiddleware,
+  requireRole("PASSENGER"),
+  rateTrip
+);
 
 module.exports = router;
