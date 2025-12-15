@@ -59,7 +59,7 @@ async function createTrip(req, res) {
     session.startTransaction();
 
     const existingTrip = await Trip.findOne(
-      { driver: driver._id, status: "ON_GOING" },
+      { driver: driver._id, tripStatus: "ON_GOING" },
       null,
       { session }
     );
@@ -95,7 +95,7 @@ async function createTrip(req, res) {
           passenger: request.passenger,
           driver: driver._id,
           vehicle: vehicle._id,
-          status: "ON_GOING",
+          tripStatus: "ACCEPTED",
         },
       ],
       { session }
@@ -183,8 +183,16 @@ async function startTrip(req, res) {
     trip.request.status = "ON_GOING";
     await trip.request.save();
 
-    if (!trip.startedAt) trip.startedAt = new Date();
-    await trip.save();
+    if (trip.tripStatus !== "ACCEPTED") {
+      return res.status(400).json({
+        message: `Trip can only be started when tripStatus is ACCEPTED (current: ${trip.tripStatus})`,
+    });
+}
+
+trip.tripStatus = "ON_GOING";
+if (!trip.startTime) trip.startTime = new Date();
+await trip.save();
+
 
     return res.json({ message: "Trip started", trip });
   } catch (err) {
@@ -219,15 +227,15 @@ async function completeTrip(req, res) {
       return res.status(403).json({ message: "You are not the driver of this trip" });
     }
 
-    if (trip.status !== "ON_GOING") {
+    if (trip.tripStatus !== "ON_GOING") {
       await session.abortTransaction();
       return res.status(400).json({
         message: `Only ON_GOING trips can be completed (current: ${trip.status})`,
       });
     }
 
-    trip.status = "COMPLETED";
-    trip.completedAt = new Date();
+    trip.tripStatus = "COMPLETED";
+    trip.endTime = new Date();
     await trip.save({ session });
 
     if (trip.request) {
@@ -285,18 +293,18 @@ async function cancelTrip(req, res) {
       return res.status(403).json({ message: "You are not the driver of this trip" });
     }
 
-    if (trip.status === "COMPLETED") {
+    if (trip.tripStatus === "COMPLETED") {
       await session.abortTransaction();
       return res.status(400).json({ message: "COMPLETED trip cannot be cancelled" });
     }
 
-    if (trip.status === "CANCELLED") {
+    if (trip.tripStatus === "CANCELLED") {
       await session.commitTransaction();
       return res.json({ trip });
     }
 
-    trip.status = "CANCELLED";
-    trip.completedAt = new Date();
+    trip.tripStatus = "CANCELLED";
+    trip.endTime = new Date();
     await trip.save({ session });
 
     if (trip.request && trip.request.status !== "COMPLETED") {
@@ -340,7 +348,7 @@ async function listTrips(req, res) {
 
     const filter = {};
 
-    if (status) filter.status = status;
+    if (status) filter.tripStatus = status;
     if (passengerId) filter.passenger = passengerId;
     if (requestId) filter.request = requestId;
 

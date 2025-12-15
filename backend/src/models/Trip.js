@@ -27,17 +27,16 @@ const tripSchema = new mongoose.Schema(
       required: true,
     },
 
-    status: {
+    tripStatus: {
       type: String,
-      enum: ["ON_GOING", "COMPLETED", "CANCELLED"],
-      default: "ON_GOING",
+      enum: ["ACCEPTED", "ON_GOING", "COMPLETED", "CANCELLED"],
+      default: "ACCEPTED",
+    },  
+    startTime: {
+      type: Date,
     },
 
-    startedAt: {
-      type: Date,
-      default: Date.now,
-    },
-    completedAt: {
+    endTime: {
       type: Date,
     },
 
@@ -55,7 +54,7 @@ const tripSchema = new mongoose.Schema(
     },
 
     // Optional: later we can add fare, distance, etc.
-    fare: {
+    price: {
       type: Number,
       default: 0,
       min: 0,
@@ -71,14 +70,14 @@ tripSchema.index({ request: 1 }, { unique: true });
 
 // 2) Aynı driver için aynı anda sadece 1 ON_GOING trip olsun
 tripSchema.index(
-  { driver: 1, status: 1 },
-  { unique: true, partialFilterExpression: { status: "ON_GOING" } }
+  { driver: 1, tripStatus: 1 },
+  { unique: true, partialFilterExpression: { tripStatus: "ON_GOING" } }
 );
 
 // 3) Aynı araç için aynı anda sadece 1 ON_GOING trip olsun
 tripSchema.index(
-  { vehicle: 1, status: 1 },
-  { unique: true, partialFilterExpression: { status: "ON_GOING" } }
+  { vehicle: 1, tripStatus: 1 },
+  { unique: true, partialFilterExpression: { tripStatus: "ON_GOING" } }
 );
 
 module.exports = mongoose.model("Trip", tripSchema);
