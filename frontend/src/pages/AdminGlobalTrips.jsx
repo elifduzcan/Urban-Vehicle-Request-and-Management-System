@@ -165,6 +165,9 @@ export default function AdminGlobalTrips() {
               <th style={{ borderBottom: "1px solid #ddd", textAlign: "left" }}>
                 Created At
               </th>
+              <th style={{ borderBottom: "1px solid #ddd", textAlign: "left" }}>
+                Detail
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -238,6 +241,15 @@ export default function AdminGlobalTrips() {
                 >
                   {formatDate(t.createdAt)}
                 </td>
+                <td
+                  style={{
+                    borderBottom: "1px solid #f0f0f0",
+                    padding: "4px 0",
+                  }}
+                >
+                  <Link to={`/trips/${t._id}`}>View</Link>
+                </td>
+
               </tr>
             ))}
           </tbody>
