@@ -5,8 +5,18 @@ import api from "../api/client";
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);   // { id, name, email, role }
+  const [user, setUser] = useState(null); // { id, name, email, role }
   const [loading, setLoading] = useState(true);
+
+  const normalizeUser = (u) => {
+    if (!u) return null;
+    return {
+      id: u._id || u.id,
+      name: u.name || "",
+      email: u.email || "",
+      role: u.role || "",
+    };
+  };
 
   // Sayfa yenilenince /app açıldığında kullanıcıyı otomatik yükle
   useEffect(() => {
@@ -16,27 +26,27 @@ export function AuthProvider({ children }) {
         setLoading(false);
         return;
       }
+
       try {
         const res = await api.get("/auth/me");
-        setUser({
-          id: res.data._id || res.data.id,
-          name: res.data.name,
-          email: res.data.email,
-          role: res.data.role,
-        });
+        setUser(normalizeUser(res.data));
       } catch (err) {
         console.error("Failed to fetch /auth/me", err);
         localStorage.removeItem("token");
+        setUser(null);
       } finally {
         setLoading(false);
       }
     }
+
     fetchMe();
   }, []);
 
   const login = (userData, token) => {
-    localStorage.setItem("token", token);
-    setUser(userData);
+    if (token) {
+      localStorage.setItem("token", token);
+    }
+    setUser(normalizeUser(userData));
   };
 
   const logout = () => {
@@ -46,11 +56,7 @@ export function AuthProvider({ children }) {
 
   const value = { user, loading, login, logout };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

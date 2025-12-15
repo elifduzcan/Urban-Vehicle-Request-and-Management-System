@@ -1,4 +1,3 @@
-// src/routes/coordinatorRoutes.js
 const express = require("express");
 const router = express.Router();
 

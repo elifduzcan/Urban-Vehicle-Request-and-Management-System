@@ -12,12 +12,38 @@ export default function RegisterPage() {
     name: "",
     email: "",
     password: "",
-    role: "PASSENGER", // default
+    role: "PASSENGER", // default rol
   });
   const [error, setError] = useState("");
 
   const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  // Login'deki ile aynı: rol bazlı yönlendirme
+  const redirectByRole = (role) => {
+    switch (role) {
+      case "DRIVER":
+        navigate("/driver");
+        break;
+      case "ADMIN":
+        // Register'dan ADMIN seçilemiyor ama
+        // admin panelinden atanan kullanıcılar için bırakıyoruz.
+        navigate("/admin/users");
+        break;
+      case "COORDINATOR":
+        // Coordinator da admin panelinden atanıyor.
+        navigate("/admin/requests");
+        break;
+      case "PASSENGER":
+      default:
+        navigate("/passenger");
+        break;
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -25,80 +51,93 @@ export default function RegisterPage() {
     setError("");
 
     try {
+      // Backend: POST /api/auth/register
       const res = await api.post("/auth/register", form);
-      const { user, token } = res.data;
+
+      // Beklenen cevap: { token, user: { ... } }
+      const { token, user } = res.data || {};
+
+      if (!token || !user) {
+        setError("Unexpected response from server.");
+        return;
+      }
+
+      // Kayıt olur olmaz direkt login etmiş gibi sisteme al
       login(user, token);
 
-      if (user.role === "DRIVER") {
-      navigate("/driver");
-    } else if (user.role === "COORDINATOR") {
-      navigate("/admin/requests");
-    } else if (user.role === "ADMIN") {
-      navigate("/admin/users");
-    } else {
-      navigate("/passenger");
-    }
+      // Rol'e göre yönlendir
+      redirectByRole(user.role);
     } catch (err) {
-      console.error(err);
-      setError(
-        err.response?.data?.message ||
-          "Registration failed. Please check your info."
-      );
+      console.error("Register error:", err);
+      const message =
+        err?.response?.data?.message ||
+        "Registration failed. Please try again.";
+      setError(message);
     }
   };
 
   return (
     <div style={{ maxWidth: 400, margin: "40px auto" }}>
-      <h2>Register</h2>
+      <h1>Register</h1>
       <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: 12 }}>
-          <label>Name</label>
-          <input
-            type="text"
-            name="name"
-            value={form.name}
-            onChange={handleChange}
-            required
-            style={{ width: "100%", padding: 8 }}
-          />
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <label>Email</label>
-          <input
-            type="email"
-            name="email"
-            value={form.email}
-            onChange={handleChange}
-            required
-            style={{ width: "100%", padding: 8 }}
-          />
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <label>Password</label>
-          <input
-            type="password"
-            name="password"
-            value={form.password}
-            onChange={handleChange}
-            required
-            style={{ width: "100%", padding: 8 }}
-          />
+        <div style={{ marginBottom: 8 }}>
+          <label>
+            Name:
+            <input
+              type="text"
+              name="name"
+              value={form.name}
+              onChange={handleChange}
+              required
+              style={{ width: "100%", padding: "4px 8px", marginTop: 4 }}
+            />
+          </label>
         </div>
 
-        <div style={{ marginBottom: 12 }}>
-          <label>Role</label>
-          <select
-            name="role"
-            value={form.role}
-            onChange={handleChange}
-            style={{ width: "100%", padding: 8 }}
-          >
-            <option value="PASSENGER">Passenger</option>
-            <option value="DRIVER">Driver</option>
-            <option value="ADMIN">Admin</option>
-            {/* COORDINATOR / ADMIN normalde sadece admin tarafından atanmalı
-                ama test için istersen buraya da eklenebilir */}
-          </select>
+        <div style={{ marginBottom: 8 }}>
+          <label>
+            Email:
+            <input
+              type="email"
+              name="email"
+              value={form.email}
+              onChange={handleChange}
+              required
+              style={{ width: "100%", padding: "4px 8px", marginTop: 4 }}
+            />
+          </label>
+        </div>
+
+        <div style={{ marginBottom: 8 }}>
+          <label>
+            Password:
+            <input
+              type="password"
+              name="password"
+              value={form.password}
+              onChange={handleChange}
+              required
+              style={{ width: "100%", padding: "4px 8px", marginTop: 4 }}
+            />
+          </label>
+        </div>
+
+        <div style={{ marginBottom: 8 }}>
+          <label>
+            Role:
+            <select
+              name="role"
+              value={form.role}
+              onChange={handleChange}
+              style={{ width: "100%", padding: 8, marginTop: 4 }}
+            >
+              <option value="PASSENGER">Passenger</option>
+              <option value="DRIVER">Driver</option>
+              {/* ADMIN ve COORDINATOR rolleri,
+                  sadece mevcut bir admin tarafından
+                  admin panelinden atanır. */}
+            </select>
+          </label>
         </div>
 
         {error && (

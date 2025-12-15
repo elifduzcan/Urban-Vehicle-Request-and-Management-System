@@ -6,12 +6,21 @@ import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
 import PassengerDashboard from "./pages/PassengerDashboard";
 import DriverDashboard from "./pages/DriverDashboard";
+import AvailableRequests from "./pages/AvailableRequests";
+import MyTrips from "./pages/MyTrips";
+
 
 import AdminUserManagement from "./pages/AdminUserManagement";
 import AdminPendingDrivers from "./pages/AdminPendingDrivers";
 import AdminPendingVehicles from "./pages/AdminPendingVehicles";
 import AdminGlobalRequests from "./pages/AdminGlobalRequests";
 import AdminGlobalTrips from "./pages/AdminGlobalTrips";
+import CoordinatorDashboard from "./pages/CoordinatorDashboard";
+import CoordinatorRequests from "./pages/CoordinatorRequests";
+
+
+import HomePage from "./pages/Home";
+import PassengerTrips from "./pages/PassengerTrips"; // ✅ yeni trip history sayfası
 
 // Küçük helper: tarih formatlayıcı (admin & coordinator sayfalarında kullanacağız)
 export function formatDate(iso) {
@@ -22,21 +31,30 @@ export function formatDate(iso) {
 
 // Ortak küçük component: Admin / Coordinator sekme menüsü
 export function AdminTabs() {
+  const { user } = useAuth();
+
+  const role = user?.role;
+  const isAdmin = role === "ADMIN";
+  const isCoordinator = role === "COORDINATOR";
+
+  // Admin isterse coordinator sayfalarını da görsün istiyorsan:
+  const canSeeCoordinatorTabs = isCoordinator || isAdmin;
+
   return (
-    <div style={{ marginBottom: 16 }}>
-      <Link to="/admin/users" style={{ marginRight: 8 }}>
-        Users
-      </Link>
-      <Link to="/admin/pending-drivers" style={{ marginRight: 8 }}>
-        Pending Drivers
-      </Link>
-      <Link to="/admin/pending-vehicles" style={{ marginRight: 8 }}>
-        Pending Vehicles
-      </Link>
-      <Link to="/admin/requests" style={{ marginRight: 8 }}>
-        Global Requests
-      </Link>
-      <Link to="/admin/trips">Global Trips</Link>
+    <div style={{ display: "flex", gap: 10, margin: "12px 0" }}>
+      {isAdmin && (
+        <>
+          <a href="/admin/users">Users</a>
+          <a href="/admin/global-trips">Global Trips</a>
+        </>
+      )}
+
+      {canSeeCoordinatorTabs && (
+        <>
+          <a href="/coordinator">Coordinator Dashboard</a>
+          <a href="/coordinator/requests">Coordinator Requests</a>
+        </>
+      )}
     </div>
   );
 }
@@ -78,9 +96,14 @@ export default function App() {
 
             {/* Passenger linkleri */}
             {user.role === "PASSENGER" && (
-              <Link to="/passenger" style={{ marginRight: 12 }}>
-                Passenger Dashboard
-              </Link>
+              <>
+                <Link to="/passenger" style={{ marginRight: 12 }}>
+                  Passenger Dashboard
+                </Link>
+                <Link to="/passenger/trips" style={{ marginRight: 12 }}>
+                  Trip History
+                </Link>
+              </>
             )}
 
             {/* Driver linkleri */}
@@ -108,6 +131,12 @@ export default function App() {
             {/* COORDINATOR linkleri (admin ile aynı operasyon ekranlarına gider) */}
             {user.role === "COORDINATOR" && (
               <>
+                <Link to="/coordinator" style={{ marginRight: 12 }}>
+                  Coordinator – Overview
+                </Link>
+                <Link to="/coordinator/requests" style={{ marginRight: 12 }}>
+                  Coordinator – Assign Requests
+                </Link>
                 <Link to="/admin/pending-drivers" style={{ marginRight: 12 }}>
                   Coordinator – Drivers
                 </Link>
@@ -115,7 +144,7 @@ export default function App() {
                   Coordinator – Vehicles
                 </Link>
                 <Link to="/admin/requests" style={{ marginRight: 12 }}>
-                  Coordinator – Requests
+                  Coordinator – All Requests
                 </Link>
                 <Link to="/admin/trips" style={{ marginRight: 12 }}>
                   Coordinator – Trips
@@ -142,12 +171,13 @@ export default function App() {
 
       {/* ROUTES */}
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        {/* / artık HomePage → giriş yapmışsa role göre redirect, değilse login */}
+        <Route path="/" element={<HomePage />} />
 
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
 
-        {/* Passenger */}
+        {/* PASSENGER DASHBOARD */}
         <Route
           path="/passenger"
           element={
@@ -156,8 +186,16 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-
-        {/* Driver */}
+        {/* PASSENGER -> TRIP HISTORY */}
+        <Route
+          path="/passenger/trips"
+          element={
+            <ProtectedRoute allowedRoles={["PASSENGER"]}>
+              <PassengerTrips />
+            </ProtectedRoute>
+          }
+        />
+        {/* DRIVER DASHBOARD -> ANA SAYFA */}
         <Route
           path="/driver"
           element={
@@ -167,17 +205,55 @@ export default function App() {
           }
         />
 
-        {/* ADMIN PANELİ – sadece ADMIN user listesine girebilir */}
+        {/* DRIVER -> AVAILABLE REQUESTS */}
+        <Route
+          path="/driver/requests"
+          element={
+            <ProtectedRoute allowedRoles={["DRIVER"]}>
+              <AvailableRequests />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* DRIVER -> MY TRIPS */}
+        <Route
+          path="/driver/my-trips"
+          element={
+            <ProtectedRoute allowedRoles={["DRIVER"]}>
+              <MyTrips />
+            </ProtectedRoute>
+          }
+        />
+        {/* COORDINATOR DASHBOARD */} 
+        <Route
+          path="/coordinator"
+          element={
+            <ProtectedRoute allowedRoles={["COORDINATOR", "ADMIN"]}>
+              <CoordinatorDashboard />
+            </ProtectedRoute>
+          }
+        />
+        {/* COORDINATOR -> REQUESTS */}
+        <Route
+          path="/coordinator/requests"
+          element={
+            <ProtectedRoute allowedRoles={["COORDINATOR", "ADMIN"]}>
+              <CoordinatorRequests />
+            </ProtectedRoute>
+          }
+        />
+        {/* ADMIN DASHBOARD & ALT SAYFALAR */}
+        
+        {/* ADMIN */}
         <Route
           path="/admin/users"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
               <AdminUserManagement />
             </ProtectedRoute>
           }
         />
 
-        {/* Pending Drivers – ADMIN + COORDINATOR */}
         <Route
           path="/admin/pending-drivers"
           element={
@@ -187,7 +263,6 @@ export default function App() {
           }
         />
 
-        {/* Pending Vehicles – ADMIN + COORDINATOR */}
         <Route
           path="/admin/pending-vehicles"
           element={
@@ -197,7 +272,6 @@ export default function App() {
           }
         />
 
-        {/* Global Requests – ADMIN + COORDINATOR */}
         <Route
           path="/admin/requests"
           element={
@@ -207,7 +281,6 @@ export default function App() {
           }
         />
 
-        {/* Global Trips – ADMIN + COORDINATOR */}
         <Route
           path="/admin/trips"
           element={
@@ -217,9 +290,10 @@ export default function App() {
           }
         />
 
-        {/* Bilinmeyen route → 404 */}
-        <Route path="*" element={<p>Page not found.</p>} />
       </Routes>
+      
+
+
     </div>
   );
 }
