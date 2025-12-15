@@ -94,6 +94,8 @@ export default function PassengerDashboard() {
 
   // Request iptal et (sadece PENDING iken)
   async function handleCancelRequest(requestId) {
+    if (!window.confirm("Are you sure you want to cancel this request?")) return;
+
     setError("");
     setSuccessMsg("");
 
@@ -152,9 +154,7 @@ export default function PassengerDashboard() {
             />
           </div>
 
-          {error && (
-            <p style={{ color: "red", marginBottom: 8 }}>{error}</p>
-          )}
+          {error && <p style={{ color: "red", marginBottom: 8 }}>{error}</p>}
           {successMsg && (
             <p style={{ color: "green", marginBottom: 8 }}>{successMsg}</p>
           )}
@@ -189,49 +189,19 @@ export default function PassengerDashboard() {
           >
             <thead>
               <tr>
-                <th
-                  style={{
-                    borderBottom: "1px solid #ccc",
-                    textAlign: "left",
-                    paddingBottom: 4,
-                  }}
-                >
+                <th style={{ borderBottom: "1px solid #ccc", textAlign: "left", paddingBottom: 4 }}>
                   Pickup
                 </th>
-                <th
-                  style={{
-                    borderBottom: "1px solid #ccc",
-                    textAlign: "left",
-                    paddingBottom: 4,
-                  }}
-                >
+                <th style={{ borderBottom: "1px solid #ccc", textAlign: "left", paddingBottom: 4 }}>
                   Dropoff
                 </th>
-                <th
-                  style={{
-                    borderBottom: "1px solid #ccc",
-                    textAlign: "left",
-                    paddingBottom: 4,
-                  }}
-                >
+                <th style={{ borderBottom: "1px solid #ccc", textAlign: "left", paddingBottom: 4 }}>
                   Status
                 </th>
-                <th
-                  style={{
-                    borderBottom: "1px solid #ccc",
-                    textAlign: "left",
-                    paddingBottom: 4,
-                  }}
-                >
+                <th style={{ borderBottom: "1px solid #ccc", textAlign: "left", paddingBottom: 4 }}>
                   Created At
                 </th>
-                <th
-                  style={{
-                    borderBottom: "1px solid #ccc",
-                    textAlign: "left",
-                    paddingBottom: 4,
-                  }}
-                >
+                <th style={{ borderBottom: "1px solid #ccc", textAlign: "left", paddingBottom: 4 }}>
                   Action
                 </th>
               </tr>
@@ -239,20 +209,10 @@ export default function PassengerDashboard() {
             <tbody>
               {requests.map((req) => (
                 <tr key={req._id}>
-                  <td
-                    style={{
-                      borderBottom: "1px solid #eee",
-                      padding: "4px 0",
-                    }}
-                  >
+                  <td style={{ borderBottom: "1px solid #eee", padding: "4px 0" }}>
                     {req.pickupAddress}
                   </td>
-                  <td
-                    style={{
-                      borderBottom: "1px solid #eee",
-                      padding: "4px 0",
-                    }}
-                  >
+                  <td style={{ borderBottom: "1px solid #eee", padding: "4px 0" }}>
                     {req.dropoffAddress}
                   </td>
                   <td
@@ -264,20 +224,10 @@ export default function PassengerDashboard() {
                   >
                     {req.status}
                   </td>
-                  <td
-                    style={{
-                      borderBottom: "1px solid #eee",
-                      padding: "4px 0",
-                    }}
-                  >
+                  <td style={{ borderBottom: "1px solid #eee", padding: "4px 0" }}>
                     {formatDate(req.createdAt)}
                   </td>
-                  <td
-                    style={{
-                      borderBottom: "1px solid #eee",
-                      padding: "4px 0",
-                    }}
-                  >
+                  <td style={{ borderBottom: "1px solid #eee", padding: "4px 0" }}>
                     {req.status === "PENDING" ? (
                       <button
                         onClick={() => handleCancelRequest(req._id)}

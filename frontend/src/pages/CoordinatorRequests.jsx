@@ -131,8 +131,20 @@ export default function CoordinatorRequests() {
   async function submitAssign() {
     if (!selectedRequest?._id) return;
 
+    // ✅ Confirm (Phase 2 UX / güvenlik)
+    if (!driverId || !vehicleId) {
+      setAssignMsg("Please select both a driver and a vehicle.");
+      return;
+    }
+
+    const ok = window.confirm(
+      "Confirm assignment? This will create/start a trip for this request."
+    );
+    if (!ok) return;
+
     setAssigning(true);
     setAssignMsg("");
+
     try {
       const res = await api.post("/coordinator/assign", {
         requestId: selectedRequest._id,
@@ -141,7 +153,9 @@ export default function CoordinatorRequests() {
       });
 
       const tripId = res.data?.trip?._id;
-      setAssignMsg(tripId ? `Assigned successfully. Trip: ${tripId}` : "Assigned successfully.");
+      setAssignMsg(
+        tripId ? `Assigned successfully. Trip: ${tripId}` : "Assigned successfully."
+      );
 
       // listeleri yenile
       await fetchPendingRequests();
