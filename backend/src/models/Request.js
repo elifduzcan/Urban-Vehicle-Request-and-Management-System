@@ -15,7 +15,7 @@ const requestSchema = new mongoose.Schema(
       trim: true,
     },
 
-    dropoffAddress: {
+    dropAddress: {
       type: String,
       required: true,
       trim: true,

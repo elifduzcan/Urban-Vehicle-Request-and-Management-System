@@ -3,11 +3,11 @@ const Trip = require("../models/Trip");
 
 async function createRequest(req, res) {
   try {
-    const { pickupAddress, dropoffAddress } = req.body;
+    const { pickupAddress, dropAddress } = req.body;
 
-    if (!pickupAddress || !dropoffAddress) {
+    if (!pickupAddress || !dropAddress) {
       return res.status(400).json({
-        message: "pickupAddress and dropoffAddress are required",
+        message: "pickupAddress and dropAddress are required",
       });
     }
 
@@ -26,7 +26,7 @@ async function createRequest(req, res) {
     const request = await Request.create({
       passenger: req.user.userId,
       pickupAddress,
-      dropoffAddress,
+      dropAddress,
     });
 
     return res.status(201).json({ request });
