@@ -19,6 +19,9 @@ import CoordinatorDashboard from "./pages/CoordinatorDashboard";
 import CoordinatorRequests from "./pages/CoordinatorRequests";
 import TripDetail from "./pages/TripDetail";
 import RequestDetail from "./pages/RequestDetail";
+import AdminStats from "./pages/AdminStats";
+import AdminConsistency from "./pages/AdminConsistency";
+
 import HomePage from "./pages/Home";
 import PassengerTrips from "./pages/PassengerTrips"; // ✅ yeni trip history sayfası
 
@@ -124,6 +127,12 @@ export default function App() {
                 </Link>
                 <Link to="/admin/trips" style={{ marginRight: 12 }}>
                   Admin – Trips
+                </Link>
+                <Link to="/admin/stats" style={{ marginRight: 12 }}>
+                  Admin – Stats
+                </Link>
+                <Link to="/admin/consistency" style={{ marginRight: 12 }}>
+                  Admin – Consistency
                 </Link>
               </>
             )}
@@ -306,6 +315,24 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/admin/stats"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
+              <AdminStats />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/consistency"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
+              <AdminConsistency />
+            </ProtectedRoute>
+          }
+        />
+
+
 
 
       </Routes>
