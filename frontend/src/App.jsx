@@ -31,21 +31,30 @@ export function formatDate(iso) {
 
 // Ortak küçük component: Admin / Coordinator sekme menüsü
 export function AdminTabs() {
+  const { user } = useAuth();
+
+  const role = user?.role;
+  const isAdmin = role === "ADMIN";
+  const isCoordinator = role === "COORDINATOR";
+
+  // Admin isterse coordinator sayfalarını da görsün istiyorsan:
+  const canSeeCoordinatorTabs = isCoordinator || isAdmin;
+
   return (
-    <div style={{ marginBottom: 16 }}>
-      <Link to="/admin/users" style={{ marginRight: 8 }}>
-        Users
-      </Link>
-      <Link to="/admin/pending-drivers" style={{ marginRight: 8 }}>
-        Pending Drivers
-      </Link>
-      <Link to="/admin/pending-vehicles" style={{ marginRight: 8 }}>
-        Pending Vehicles
-      </Link>
-      <Link to="/admin/requests" style={{ marginRight: 8 }}>
-        Global Requests
-      </Link>
-      <Link to="/admin/trips">Global Trips</Link>
+    <div style={{ display: "flex", gap: 10, margin: "12px 0" }}>
+      {isAdmin && (
+        <>
+          <a href="/admin/users">Users</a>
+          <a href="/admin/global-trips">Global Trips</a>
+        </>
+      )}
+
+      {canSeeCoordinatorTabs && (
+        <>
+          <a href="/coordinator">Coordinator Dashboard</a>
+          <a href="/coordinator/requests">Coordinator Requests</a>
+        </>
+      )}
     </div>
   );
 }

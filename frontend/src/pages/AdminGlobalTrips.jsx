@@ -187,10 +187,13 @@ export default function AdminGlobalTrips() {
                     padding: "4px 0",
                   }}
                 >
-                  {t.driver?.user?.name ||
+                  {t.driver?.name ||
+                    t.driver?.email ||
+                    t.driver?.user?.name ||
                     t.driver?.user?.email ||
                     t.driver?._id ||
                     "-"}
+
                 </td>
                 <td
                   style={{
