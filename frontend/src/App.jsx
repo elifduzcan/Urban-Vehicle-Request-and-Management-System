@@ -15,6 +15,9 @@ import AdminPendingDrivers from "./pages/AdminPendingDrivers";
 import AdminPendingVehicles from "./pages/AdminPendingVehicles";
 import AdminGlobalRequests from "./pages/AdminGlobalRequests";
 import AdminGlobalTrips from "./pages/AdminGlobalTrips";
+import CoordinatorDashboard from "./pages/CoordinatorDashboard";
+import CoordinatorRequests from "./pages/CoordinatorRequests";
+
 
 import HomePage from "./pages/Home";
 import PassengerTrips from "./pages/PassengerTrips"; // ✅ yeni trip history sayfası
@@ -119,6 +122,12 @@ export default function App() {
             {/* COORDINATOR linkleri (admin ile aynı operasyon ekranlarına gider) */}
             {user.role === "COORDINATOR" && (
               <>
+                <Link to="/coordinator" style={{ marginRight: 12 }}>
+                  Coordinator – Overview
+                </Link>
+                <Link to="/coordinator/requests" style={{ marginRight: 12 }}>
+                  Coordinator – Assign Requests
+                </Link>
                 <Link to="/admin/pending-drivers" style={{ marginRight: 12 }}>
                   Coordinator – Drivers
                 </Link>
@@ -126,7 +135,7 @@ export default function App() {
                   Coordinator – Vehicles
                 </Link>
                 <Link to="/admin/requests" style={{ marginRight: 12 }}>
-                  Coordinator – Requests
+                  Coordinator – All Requests
                 </Link>
                 <Link to="/admin/trips" style={{ marginRight: 12 }}>
                   Coordinator – Trips
@@ -168,7 +177,15 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-
+        {/* PASSENGER -> TRIP HISTORY */}
+        <Route
+          path="/passenger/trips"
+          element={
+            <ProtectedRoute allowedRoles={["PASSENGER"]}>
+              <PassengerTrips />
+            </ProtectedRoute>
+          }
+        />
         {/* DRIVER DASHBOARD -> ANA SAYFA */}
         <Route
           path="/driver"
@@ -198,7 +215,74 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        {/* COORDINATOR DASHBOARD */} 
+        <Route
+          path="/coordinator"
+          element={
+            <ProtectedRoute allowedRoles={["COORDINATOR", "ADMIN"]}>
+              <CoordinatorDashboard />
+            </ProtectedRoute>
+          }
+        />
+        {/* COORDINATOR -> REQUESTS */}
+        <Route
+          path="/coordinator/requests"
+          element={
+            <ProtectedRoute allowedRoles={["COORDINATOR", "ADMIN"]}>
+              <CoordinatorRequests />
+            </ProtectedRoute>
+          }
+        />
+        {/* ADMIN DASHBOARD & ALT SAYFALAR */}
+        
+        {/* ADMIN */}
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
+              <AdminUserManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/pending-drivers"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
+              <AdminPendingDrivers />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/pending-vehicles"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
+              <AdminPendingVehicles />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/requests"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
+              <AdminGlobalRequests />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/trips"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
+              <AdminGlobalTrips />
+            </ProtectedRoute>
+          }
+        />
+
       </Routes>
+      
 
 
     </div>
