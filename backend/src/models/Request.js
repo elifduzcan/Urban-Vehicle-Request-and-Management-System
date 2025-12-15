@@ -8,22 +8,19 @@ const requestSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-
     pickupAddress: {
       type: String,
       required: true,
       trim: true,
     },
-
-    dropAddress: {
+    dropoffAddress: {
       type: String,
       required: true,
       trim: true,
     },
-
     status: {
       type: String,
-      enum: ["PENDING", "ACCEPTED", "ON_GOING", "CANCELLED", "COMPLETED"],
+      enum: ["PENDING", "ACCEPTED", "CANCELLED", "COMPLETED"],
       default: "PENDING",
     },
   },
