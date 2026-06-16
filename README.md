@@ -1,6 +1,6 @@
 # Urban Vehicle Request and Management System
 
-A backend service for managing urban ride requests, drivers, vehicles, and user roles.
+CityRide is a lightweight, modular and database-driven web application designed to manage ride requests between passengers and independent drivers within a city. The system provides a structured flow for creating ride requests, assigning drivers, validating users and vehicles, and monitoring trip status — all supported by a clean data model and role-based access control.
 
 This project was developed as part of a Database Management Systems course. It focuses on structured data modeling, role-based access control, request management, and backend API design.
 
